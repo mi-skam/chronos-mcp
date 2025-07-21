@@ -3,7 +3,7 @@ Utility functions for Chronos MCP
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 import pytz
 from dateutil import parser
 from icalendar import Calendar as iCalendar, Event as iEvent, Todo as iTodo
@@ -84,7 +84,7 @@ def create_ical_event(event_data: dict) -> iEvent:
     return event
 
 
-def validate_rrule(rrule: str) -> tuple[bool, Optional[str]]:
+def validate_rrule(rrule: str) -> Tuple[bool, Optional[str]]:
     """
     Validate RRULE syntax according to RFC 5545.
     

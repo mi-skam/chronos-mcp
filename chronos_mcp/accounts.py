@@ -49,8 +49,7 @@ class AccountManager:
         
         if not password:
             raise AccountAuthenticationError(
-                alias, 
-                message="No password available (not in keyring or config)",
+                alias,
                 request_id=request_id
             )
             

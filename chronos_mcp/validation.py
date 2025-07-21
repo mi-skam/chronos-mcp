@@ -31,13 +31,51 @@ class InputValidator:
     }
     
     DANGEROUS_PATTERNS = [
+        # Script tags (various forms)
         re.compile(r'<script[^>]*>.*?</script>', re.IGNORECASE | re.DOTALL),
         re.compile(r'<script\s+[^>]*>', re.IGNORECASE),
-        re.compile(r'(?:href|src)\s*=\s*["\']?\s*javascript:', re.IGNORECASE),
-        re.compile(r'\bon\w+\s*=\s*["\']', re.IGNORECASE),
-        re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'),
-        re.compile(r'<iframe[^>]+src[^>]*>', re.IGNORECASE),
-        re.compile(r'<(?:object|embed)[^>]+(?:code|classid|data)[^>]*>', re.IGNORECASE),
+        re.compile(r'<\s*script[^>]*>', re.IGNORECASE),
+        
+        # JavaScript protocols
+        re.compile(r'(?:href|src|action|formaction|data)\s*=\s*["\']?\s*javascript:', re.IGNORECASE),
+        re.compile(r'javascript\s*:', re.IGNORECASE),
+        
+        # Event handlers
+        re.compile(r'\bon\w+\s*=\s*["\'][^"\']*["\']', re.IGNORECASE),
+        re.compile(r'\bon\w+\s*=\s*[^"\'\s>]+', re.IGNORECASE),
+        
+        # Data URIs with script content
+        re.compile(r'data\s*:\s*[^;]*;\s*base64', re.IGNORECASE),
+        re.compile(r'data\s*:\s*text/html', re.IGNORECASE),
+        
+        # Control characters
+        re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'),
+        
+        # Dangerous HTML elements
+        re.compile(r'<(?:iframe|frame|object|embed|applet|form)[^>]*>', re.IGNORECASE),
+        re.compile(r'<(?:meta|link)[^>]+(?:http-equiv|rel)[^>]*>', re.IGNORECASE),
+        
+        # Expression and eval patterns
+        re.compile(r'expression\s*\(', re.IGNORECASE),
+        re.compile(r'eval\s*\(', re.IGNORECASE),
+        re.compile(r'setTimeout\s*\(', re.IGNORECASE),
+        re.compile(r'setInterval\s*\(', re.IGNORECASE),
+        
+        # Encoded/obfuscated patterns
+        re.compile(r'&#[xX]?[0-9a-fA-F]+;'),
+        re.compile(r'%[0-9a-fA-F]{2}'),
+        re.compile(r'\\u[0-9a-fA-F]{4}', re.IGNORECASE),
+        
+        # CSS injection patterns
+        re.compile(r'@import', re.IGNORECASE),
+        re.compile(r'url\s*\(\s*["\']?\s*javascript:', re.IGNORECASE),
+        
+        # SVG XSS patterns
+        re.compile(r'<svg[^>]*>', re.IGNORECASE),
+        re.compile(r'<foreignobject[^>]*>', re.IGNORECASE),
+        
+        # Special protocol handlers
+        re.compile(r'(?:vbscript|mocha|livescript|data):', re.IGNORECASE),
     ]
     
     @classmethod
@@ -84,6 +122,32 @@ class InputValidator:
         return sanitized
     
     @classmethod
+    def _decode_and_normalize(cls, value: str) -> str:
+        """Decode and normalize potentially obfuscated content for pattern matching"""
+        import urllib.parse
+        
+        # Create a copy for testing (don't modify original)
+        test_value = value
+        
+        # Decode common encodings
+        try:
+            # HTML entities
+            import html
+            test_value = html.unescape(test_value)
+            
+            # URL encoding  
+            test_value = urllib.parse.unquote(test_value)
+            
+            # Unicode escapes
+            test_value = test_value.encode().decode('unicode_escape', errors='ignore')
+            
+        except Exception:
+            # If decoding fails, use original value
+            test_value = value
+        
+        return test_value
+    
+    @classmethod
     def validate_text_field(cls, value: str, field_name: str, 
                           required: bool = False) -> str:
         """Validate and sanitize text fields."""
@@ -101,15 +165,18 @@ class InputValidator:
                 f"{field_name} exceeds maximum length of {max_length} characters"
             )
         
-        # Check for dangerous patterns (XSS, injection)
-        for pattern in cls.DANGEROUS_PATTERNS:
-            if pattern.search(value):
-                raise ValidationError(
-                    f"{field_name} contains potentially dangerous content"
-                )
-        
         # Normalize Unicode
         value = unicodedata.normalize('NFKC', value)
+        
+        # Check for dangerous patterns on both original and decoded versions
+        test_values = [value, cls._decode_and_normalize(value)]
+        
+        for test_val in test_values:
+            for pattern in cls.DANGEROUS_PATTERNS:
+                if pattern.search(test_val):
+                    raise ValidationError(
+                        f"{field_name} contains potentially dangerous content"
+                    )
         
         # NOTE: HTML escaping removed - should happen at display layer, not storage
         # CalDAV expects unescaped data

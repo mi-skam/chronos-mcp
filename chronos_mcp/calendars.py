@@ -82,13 +82,8 @@ class CalendarManager:
             cal_id = name.lower().replace(' ', '_')
             cal = principal.make_calendar(name=name, cal_id=cal_id)
             
-            # Set properties if provided
-            if description:
-                # Would need to set calendar description property
-                pass
-            if color:
-                # Would need to set calendar color property
-                pass
+            # Note: description and color properties would need CalDAV server support
+            # for setting calendar properties beyond name
                 
             # Return calendar info
             return Calendar(

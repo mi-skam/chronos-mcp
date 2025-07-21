@@ -19,7 +19,6 @@ from .events import EventManager
 from .models import Account, Calendar, Event
 from .search import SearchOptions, search_events as search_events_func, search_events_ranked
 from .rrule import RRuleValidator, RRuleTemplates
-# from .bulk import BulkOperationManager, BulkOptions, BulkOperationMode, BulkResult  # Simplified - not using bulk module
 from .validation import InputValidator
 from .exceptions import (
     ChronosError,
@@ -49,7 +48,6 @@ try:
     account_manager = AccountManager(config_manager)
     calendar_manager = CalendarManager(account_manager)
     event_manager = EventManager(calendar_manager)
-    # bulk_manager = BulkOperationManager(event_manager)  # Simplified - not using bulk manager
     logger.info("All managers initialized successfully")
 except Exception as e:
     logger.error(f"Error initializing managers: {e}")
@@ -276,21 +274,13 @@ async def delete_calendar(
     request_id = str(uuid.uuid4())
     
     try:
-        success = calendar_manager.delete_calendar(calendar_uid, account, request_id=request_id)
+        calendar_manager.delete_calendar(calendar_uid, account, request_id=request_id)
         
-        if success:
-            return {
-                "success": True,
-                "message": f"Calendar '{calendar_uid}' deleted successfully",
-                "request_id": request_id
-            }
-        else:
-            # This shouldn't happen with proper error handling in calendar_manager
-            raise ChronosError(
-                message=f"Failed to delete calendar '{calendar_uid}'",
-                error_code="DELETE_FAILED",
-                request_id=request_id
-            )
+        return {
+            "success": True,
+            "message": f"Calendar '{calendar_uid}' deleted successfully",
+            "request_id": request_id
+        }
             
     except CalendarNotFoundError as e:
         e.request_id = request_id
@@ -433,23 +423,15 @@ async def create_event(
             account_alias=account
         )
         
-        if event:
-            return {
-                "success": True,
-                "event": {
-                    "uid": event.uid,
-                    "summary": event.summary,
-                    "start": event.start.isoformat(),
-                    "end": event.end.isoformat()
-                }
+        return {
+            "success": True,
+            "event": {
+                "uid": event.uid,
+                "summary": event.summary,
+                "start": event.start.isoformat(),
+                "end": event.end.isoformat()
             }
-        else:
-            # This shouldn't happen with proper error handling in event_manager
-            raise EventCreationError(
-                summary=summary,
-                reason="Event manager returned None",
-                request_id=request_id
-            )
+        }
             
     except DateTimeValidationError as e:
         e.request_id = request_id
@@ -627,26 +609,18 @@ async def delete_event(
     request_id = str(uuid.uuid4())
     
     try:
-        success = event_manager.delete_event(
+        event_manager.delete_event(
             calendar_uid=calendar_uid,
             event_uid=event_uid,
             account_alias=account,
             request_id=request_id
         )
         
-        if success:
-            return {
-                "success": True,
-                "message": f"Event '{event_uid}' deleted successfully",
-                "request_id": request_id
-            }
-        else:
-            # This shouldn't happen with proper error handling in event_manager
-            raise ChronosError(
-                message=f"Failed to delete event '{event_uid}'",
-                error_code="DELETE_FAILED",
-                request_id=request_id
-            )
+        return {
+            "success": True,
+            "message": f"Event '{event_uid}' deleted successfully",
+            "request_id": request_id
+        }
             
     except EventNotFoundError as e:
         e.request_id = request_id
@@ -1207,26 +1181,6 @@ async def search_events(
             "success": False,
             "error": ErrorSanitizer.get_user_friendly_message(e),
             "error_code": e.error_code,
-            "request_id": request_id
-        }
-        
-    except Exception as e:
-        chronos_error = ChronosError(
-            message=f"Search failed: {str(e)}",
-            details={
-                "tool": "search_events",
-                "query": query,
-                "original_error": str(e),
-                "original_type": type(e).__name__
-            },
-            request_id=request_id
-        )
-        logger.error(f"Unexpected error in search_events: {chronos_error}")
-        
-        return {
-            "success": False,
-            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
-            "error_code": chronos_error.error_code,
             "request_id": request_id
         }
         

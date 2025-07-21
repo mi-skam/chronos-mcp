@@ -314,7 +314,6 @@ class EventManager:
         except Exception as e:
             logger.error(f"Error deleting event '{event_uid}': {e}", extra={"request_id": request_id})
             raise EventDeletionError(event_uid, str(e), request_id=request_id)
-            raise EventDeletionError(event_uid, str(e), request_id=request_id)
 
     def update_event(self,
                     calendar_uid: str,

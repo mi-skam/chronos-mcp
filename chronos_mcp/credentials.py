@@ -81,11 +81,10 @@ class CredentialManager:
                     return password
                 elif fallback_password:
                     logger.warning(
-                        f"Password for '{alias}' not in keyring, using config file. "
-                        "Run migration script to secure passwords."
+                        f"Password for '{alias}' found in config file but not in keyring. "
+                        "Consider running the migration script to securely store passwords in keyring: "
+                        "python -m chronos_mcp.scripts.migrate_to_keyring"
                     )
-                    # Attempt to store it in keyring for next time
-                    self.set_password(alias, fallback_password)
                     
             except Exception as e:
                 logger.error(f"Failed to retrieve password from keyring: {e}")
