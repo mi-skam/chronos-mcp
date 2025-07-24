@@ -6,7 +6,7 @@ import asyncio
 import sys
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 from fastmcp import FastMCP
 from pydantic import BaseModel, Field
@@ -16,10 +16,13 @@ from .config import ConfigManager
 from .accounts import AccountManager  
 from .calendars import CalendarManager
 from .events import EventManager
-from .models import Account, Calendar, Event
+from .tasks import TaskManager
+from .journals import JournalManager
+from .models import Account, Calendar, Event, Task, Journal
 from .search import SearchOptions, search_events as search_events_func, search_events_ranked
 from .rrule import RRuleValidator, RRuleTemplates
 from .validation import InputValidator
+from .bulk import BulkOperationManager, BulkOptions, BulkOperationMode
 from .exceptions import (
     ChronosError,
     ErrorSanitizer,
@@ -48,6 +51,13 @@ try:
     account_manager = AccountManager(config_manager)
     calendar_manager = CalendarManager(account_manager)
     event_manager = EventManager(calendar_manager)
+    task_manager = TaskManager(calendar_manager)
+    journal_manager = JournalManager(calendar_manager)
+    bulk_manager = BulkOperationManager(
+        event_manager=event_manager,
+        task_manager=task_manager,
+        journal_manager=journal_manager
+    )
     logger.info("All managers initialized successfully")
 except Exception as e:
     logger.error(f"Error initializing managers: {e}")
@@ -340,6 +350,7 @@ async def create_event(
     alarm_minutes: Optional[str] = Field(None, description="Reminder minutes before event as string ('-10080' to '10080')"),
     recurrence_rule: Optional[str] = Field(None, description="RRULE for recurring events (e.g., 'FREQ=WEEKLY;BYDAY=MO')"),
     attendees_json: Optional[str] = Field(None, description="JSON string of attendees list [{email, name, role, status, rsvp}]"),
+    related_to: Optional[List[str]] = Field(None, description="List of related component UIDs"),
     account: Optional[str] = Field(None, description="Account alias")
 ) -> Dict[str, Any]:
     """Create a new calendar event"""
@@ -420,6 +431,7 @@ async def create_event(
             alarm_minutes=alarm_mins,
             recurrence_rule=recurrence_rule,
             attendees=attendees_list,
+            related_to=related_to,
             account_alias=account
         )
         
@@ -885,7 +897,7 @@ async def create_recurring_event(
     calendar_uid: str = Field(..., description="Calendar UID"),
     summary: str = Field(..., description="Event title/summary"),
     start: str = Field(..., description="Event start time (ISO format)"),
-    duration_minutes: int = Field(..., description="Event duration in minutes"),
+    duration_minutes: Union[int, str] = Field(..., description="Event duration in minutes"),
     recurrence_rule: str = Field(..., description="RRULE for recurring events (e.g., 'FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=10')"),
     description: Optional[str] = Field(None, description="Event description"),
     location: Optional[str] = Field(None, description="Event location"),
@@ -908,6 +920,18 @@ async def create_recurring_event(
     import json
     
     request_id = str(uuid.uuid4())
+    
+    # Handle type conversion for parameters that might come as strings from MCP
+    if duration_minutes is not None:
+        try:
+            duration_minutes = int(duration_minutes)
+        except (ValueError, TypeError):
+            return {
+                "success": False,
+                "error": f"Invalid duration_minutes value: {duration_minutes}. Must be an integer",
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
     
     try:
         # Validate RRULE first
@@ -1065,7 +1089,7 @@ async def search_events(
     date_start: Optional[str] = Field(None, description="Start date for range filter (ISO format)"),
     date_end: Optional[str] = Field(None, description="End date for range filter (ISO format)"),
     calendar_uid: Optional[str] = Field(None, description="Specific calendar to search (searches all if not specified)"),
-    max_results: Optional[int] = Field(50, description="Maximum number of results to return"),
+    max_results: Optional[Union[int, str]] = Field(50, description="Maximum number of results to return"),
     account: Optional[str] = Field(None, description="Account alias (uses default if not specified)")
 ) -> Dict[str, Any]:
     """
@@ -1073,6 +1097,18 @@ async def search_events(
     No regex, no complexity, just finding your stuff.
     """
     request_id = str(uuid.uuid4())
+    
+    # Handle type conversion for parameters that might come as strings from MCP
+    if max_results is not None:
+        try:
+            max_results = int(max_results)
+        except (ValueError, TypeError):
+            return {
+                "success": False,
+                "error": f"Invalid max_results value: {max_results}. Must be an integer",
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
     
     try:
         # Input validation
@@ -1465,6 +1501,1218 @@ async def bulk_delete_events(
             request_id=request_id
         )
         logger.error(f"Unexpected error in bulk_delete_events: {chronos_error}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+@mcp.tool
+async def bulk_create_tasks(
+    calendar_uid: str = Field(..., description="Calendar UID to create tasks in"),
+    tasks: List[Dict[str, Any]] = Field(..., description="List of task data dictionaries"),
+    mode: str = Field("continue", description="Operation mode: continue, fail_fast, or atomic"),
+    max_parallel: int = Field(5, description="Maximum parallel operations"),
+    validate_before_execute: bool = Field(True, description="Validate all tasks before execution"),
+    dry_run: bool = Field(False, description="Simulate the operation without making changes"),
+    account: Optional[str] = Field(None, description="Account alias (uses default if not specified)")
+) -> Dict[str, Any]:
+    """
+    Create multiple tasks with configurable error handling and validation.
+    
+    Modes:
+    - continue: Process all tasks, report individual failures
+    - fail_fast: Stop on first error
+    - atomic: All succeed or all fail (with rollback)
+    
+    Each task dict should contain: summary, and optional fields like
+    description, due, priority, status, percent_complete, related_to, etc.
+    """
+    request_id = str(uuid.uuid4())
+    
+    try:
+        # Validate mode
+        if mode not in ["continue", "fail_fast", "atomic"]:
+            raise ValueError(f"Invalid mode '{mode}'. Must be one of: continue, fail_fast, atomic")
+        
+        # Create bulk options
+        bulk_mode = {
+            "continue": BulkOperationMode.CONTINUE_ON_ERROR,
+            "fail_fast": BulkOperationMode.FAIL_FAST,
+            "atomic": BulkOperationMode.ATOMIC
+        }[mode]
+        
+        options = BulkOptions(
+            mode=bulk_mode,
+            max_parallel=max_parallel,
+            validate_before_execute=validate_before_execute,
+            dry_run=dry_run
+        )
+        
+        # Execute bulk operation
+        result = bulk_manager.bulk_create_tasks(calendar_uid, tasks, options, account)
+        
+        return {
+            "success": result.failed == 0,
+            "total": result.total,
+            "successful": result.successful,
+            "failed": result.failed,
+            "success_rate": result.success_rate,
+            "duration_ms": result.duration_ms,
+            "results": [
+                {
+                    "index": r.index,
+                    "success": r.success,
+                    "uid": r.uid,
+                    "error": r.error,
+                    "duration_ms": r.duration_ms
+                }
+                for r in result.results
+            ],
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"Chronos error in bulk_create_tasks: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Bulk task creation failed: {str(e)}",
+            details={
+                "tool": "bulk_create_tasks",
+                "calendar_uid": calendar_uid,
+                "task_count": len(tasks),
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in bulk_create_tasks: {chronos_error}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+@mcp.tool
+async def bulk_delete_tasks(
+    calendar_uid: str = Field(..., description="Calendar UID"),
+    task_uids: List[str] = Field(..., description="List of task UIDs to delete"),
+    mode: str = Field("continue", description="Operation mode: continue or fail_fast"),
+    max_parallel: int = Field(5, description="Maximum parallel operations"),
+    dry_run: bool = Field(False, description="Simulate the operation without making changes"),
+    account: Optional[str] = Field(None, description="Account alias")
+) -> Dict[str, Any]:
+    """Delete multiple tasks efficiently."""
+    request_id = str(uuid.uuid4())
+    
+    try:
+        # Validate mode
+        if mode not in ["continue", "fail_fast"]:
+            raise ValueError(f"Invalid mode '{mode}'. Must be one of: continue, fail_fast")
+        
+        # Create bulk options
+        bulk_mode = {
+            "continue": BulkOperationMode.CONTINUE_ON_ERROR,
+            "fail_fast": BulkOperationMode.FAIL_FAST
+        }[mode]
+        
+        options = BulkOptions(
+            mode=bulk_mode,
+            max_parallel=max_parallel,
+            dry_run=dry_run
+        )
+        
+        # Execute bulk operation
+        result = bulk_manager.bulk_delete_tasks(calendar_uid, task_uids, options)
+        
+        return {
+            "success": result.failed == 0,
+            "total": result.total,
+            "successful": result.successful,
+            "failed": result.failed,
+            "success_rate": result.success_rate,
+            "duration_ms": result.duration_ms,
+            "results": [
+                {
+                    "index": r.index,
+                    "success": r.success,
+                    "uid": r.uid,
+                    "error": r.error,
+                    "duration_ms": r.duration_ms
+                }
+                for r in result.results
+            ],
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"Chronos error in bulk_delete_tasks: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Bulk task deletion failed: {str(e)}",
+            details={
+                "tool": "bulk_delete_tasks",
+                "calendar_uid": calendar_uid,
+                "task_count": len(task_uids),
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in bulk_delete_tasks: {chronos_error}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+# ============= Task Management Tools =============
+
+@mcp.tool
+async def create_task(
+    calendar_uid: str = Field(..., description="Calendar UID"),
+    summary: str = Field(..., description="Task title/summary"),
+    description: Optional[str] = Field(None, description="Task description"),
+    due: Optional[str] = Field(None, description="Task due date (ISO format)"),
+    priority: Optional[Union[int, str]] = Field(None, description="Task priority (1-9, 1 is highest)"),
+    status: str = Field("NEEDS-ACTION", description="Task status (NEEDS-ACTION, IN-PROCESS, COMPLETED, CANCELLED)"),
+    related_to: Optional[List[str]] = Field(None, description="List of related component UIDs"),
+    account: Optional[str] = Field(None, description="Account alias")
+) -> Dict[str, Any]:
+    """Create a new task"""
+    from .utils import parse_datetime
+    from .validation import InputValidator, ValidationError
+    from .models import TaskStatus
+    
+    request_id = str(uuid.uuid4())
+    
+    # Handle type conversion for parameters that might come as strings from MCP
+    if priority is not None:
+        try:
+            priority = int(priority)
+        except (ValueError, TypeError):
+            return {
+                "success": False,
+                "error": f"Invalid priority value: {priority}. Must be an integer between 1 and 9",
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+    
+    try:
+        # Validate and sanitize text inputs
+        try:
+            summary = InputValidator.validate_text_field(summary, 'summary', required=True)
+            if description:
+                description = InputValidator.validate_text_field(description, 'description')
+        except ValidationError as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+        
+        # Parse due date if provided
+        due_dt = None
+        if due:
+            due_dt = parse_datetime(due)
+        
+        # Validate priority
+        if priority is not None and not (1 <= priority <= 9):
+            return {
+                "success": False,
+                "error": "Priority must be between 1 and 9",
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+        
+        # Parse status
+        try:
+            task_status = TaskStatus(status)
+        except ValueError:
+            return {
+                "success": False,
+                "error": f"Invalid status: {status}. Must be one of: NEEDS-ACTION, IN-PROCESS, COMPLETED, CANCELLED",
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+        
+        task = task_manager.create_task(
+            calendar_uid=calendar_uid,
+            summary=summary,
+            description=description,
+            due=due_dt,
+            priority=priority,
+            status=task_status,
+            related_to=related_to,
+            account_alias=account,
+            request_id=request_id
+        )
+        
+        return {
+            "success": True,
+            "task": {
+                "uid": task.uid,
+                "summary": task.summary,
+                "description": task.description,
+                "due": task.due.isoformat() if task.due else None,
+                "priority": task.priority,
+                "status": task.status.value,
+                "percent_complete": task.percent_complete,
+                "related_to": task.related_to
+            },
+            "request_id": request_id
+        }
+        
+    except (CalendarNotFoundError, EventCreationError) as e:
+        e.request_id = request_id
+        logger.error(f"Task creation error: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"Create task failed: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Failed to create task: {str(e)}",
+            details={
+                "tool": "create_task",
+                "summary": summary,
+                "calendar_uid": calendar_uid,
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in create_task: {chronos_error}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+@mcp.tool
+async def list_tasks(
+    calendar_uid: str = Field(..., description="Calendar UID"),
+    account: Optional[str] = Field(None, description="Account alias")
+) -> Dict[str, Any]:
+    """List all tasks in a calendar"""
+    request_id = str(uuid.uuid4())
+    
+    try:
+        tasks = task_manager.list_tasks(
+            calendar_uid=calendar_uid,
+            account_alias=account,
+            request_id=request_id
+        )
+        
+        return {
+            "tasks": [
+                {
+                    "uid": task.uid,
+                    "summary": task.summary,
+                    "description": task.description,
+                    "due": task.due.isoformat() if task.due else None,
+                    "priority": task.priority,
+                    "status": task.status.value,
+                    "percent_complete": task.percent_complete,
+                    "categories": task.categories
+                }
+                for task in tasks
+            ],
+            "total": len(tasks),
+            "request_id": request_id
+        }
+        
+    except CalendarNotFoundError as e:
+        e.request_id = request_id
+        logger.error(f"Calendar not found for list_tasks: {e}")
+        
+        return {
+            "tasks": [],
+            "total": 0,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"List tasks failed: {e}")
+        
+        return {
+            "tasks": [],
+            "total": 0,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Failed to list tasks: {str(e)}",
+            details={
+                "tool": "list_tasks",
+                "calendar_uid": calendar_uid,
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in list_tasks: {chronos_error}")
+        
+        return {
+            "tasks": [],
+            "total": 0,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+@mcp.tool
+async def update_task(
+    calendar_uid: str = Field(..., description="Calendar UID"),
+    task_uid: str = Field(..., description="Task UID to update"),
+    summary: Optional[str] = Field(None, description="Task title/summary"),
+    description: Optional[str] = Field(None, description="Task description"),
+    due: Optional[str] = Field(None, description="Task due date (ISO format)"),
+    priority: Optional[Union[int, str]] = Field(None, description="Task priority (1-9, 1 is highest)"),
+    status: Optional[str] = Field(None, description="Task status"),
+    percent_complete: Optional[Union[int, str]] = Field(None, description="Completion percentage (0-100)"),
+    account: Optional[str] = Field(None, description="Account alias")
+) -> Dict[str, Any]:
+    """Update an existing task. Only provided fields will be updated."""
+    from .utils import parse_datetime
+    from .validation import InputValidator, ValidationError
+    from .models import TaskStatus
+    
+    request_id = str(uuid.uuid4())
+    
+    # Handle type conversion for parameters that might come as strings from MCP
+    if priority is not None:
+        try:
+            priority = int(priority)
+        except (ValueError, TypeError):
+            return {
+                "success": False,
+                "error": f"Invalid priority value: {priority}. Must be an integer between 1 and 9",
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+    
+    if percent_complete is not None:
+        try:
+            percent_complete = int(percent_complete)
+        except (ValueError, TypeError):
+            return {
+                "success": False,
+                "error": f"Invalid percent_complete value: {percent_complete}. Must be an integer between 0 and 100",
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+    
+    try:
+        # Validate text inputs if provided
+        try:
+            if summary is not None:
+                summary = InputValidator.validate_text_field(summary, 'summary', required=True)
+            if description is not None:
+                description = InputValidator.validate_text_field(description, 'description')
+        except ValidationError as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+        
+        # Parse due date if provided
+        due_dt = None
+        if due is not None:
+            due_dt = parse_datetime(due) if due else None
+        
+        # Validate priority if provided
+        if priority is not None and not (1 <= priority <= 9):
+            return {
+                "success": False,
+                "error": "Priority must be between 1 and 9",
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+        
+        # Parse status if provided
+        task_status = None
+        if status is not None:
+            try:
+                task_status = TaskStatus(status)
+            except ValueError:
+                return {
+                    "success": False,
+                    "error": f"Invalid status: {status}",
+                    "error_code": "VALIDATION_ERROR",
+                    "request_id": request_id
+                }
+        
+        # Validate percent_complete if provided
+        if percent_complete is not None and not (0 <= percent_complete <= 100):
+            return {
+                "success": False,
+                "error": "Percent complete must be between 0 and 100",
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+        
+        updated_task = task_manager.update_task(
+            task_uid=task_uid,
+            calendar_uid=calendar_uid,
+            summary=summary,
+            description=description,
+            due=due_dt,
+            priority=priority,
+            status=task_status,
+            percent_complete=percent_complete,
+            account_alias=account,
+            request_id=request_id
+        )
+        
+        return {
+            "success": True,
+            "task": {
+                "uid": updated_task.uid,
+                "summary": updated_task.summary,
+                "description": updated_task.description,
+                "due": updated_task.due.isoformat() if updated_task.due else None,
+                "priority": updated_task.priority,
+                "status": updated_task.status.value,
+                "percent_complete": updated_task.percent_complete,
+                "categories": updated_task.categories
+            },
+            "message": f"Task '{task_uid}' updated successfully",
+            "request_id": request_id
+        }
+        
+    except EventNotFoundError as e:
+        e.request_id = request_id
+        logger.error(f"Task not found for update: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except (CalendarNotFoundError, EventCreationError) as e:
+        e.request_id = request_id
+        logger.error(f"Update task failed: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"Update task failed: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Failed to update task: {str(e)}",
+            details={
+                "tool": "update_task",
+                "task_uid": task_uid,
+                "calendar_uid": calendar_uid,
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in update_task: {chronos_error}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+@mcp.tool
+async def delete_task(
+    calendar_uid: str = Field(..., description="Calendar UID"),
+    task_uid: str = Field(..., description="Task UID to delete"),
+    account: Optional[str] = Field(None, description="Account alias")
+) -> Dict[str, Any]:
+    """Delete a task"""
+    request_id = str(uuid.uuid4())
+    
+    try:
+        task_manager.delete_task(
+            calendar_uid=calendar_uid,
+            task_uid=task_uid,
+            account_alias=account,
+            request_id=request_id
+        )
+        
+        return {
+            "success": True,
+            "message": f"Task '{task_uid}' deleted successfully",
+            "request_id": request_id
+        }
+        
+    except EventNotFoundError as e:
+        e.request_id = request_id
+        logger.error(f"Task not found for deletion: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except CalendarNotFoundError as e:
+        e.request_id = request_id
+        logger.error(f"Calendar not found for task deletion: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"Delete task failed: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Failed to delete task: {str(e)}",
+            details={
+                "tool": "delete_task",
+                "task_uid": task_uid,
+                "calendar_uid": calendar_uid,
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in delete_task: {chronos_error}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+@mcp.tool
+async def bulk_create_journals(
+    calendar_uid: str = Field(..., description="Calendar UID to create journals in"),
+    journals: List[Dict[str, Any]] = Field(..., description="List of journal data dictionaries"),
+    mode: str = Field("continue", description="Operation mode: continue, fail_fast, or atomic"),
+    max_parallel: int = Field(5, description="Maximum parallel operations"),
+    validate_before_execute: bool = Field(True, description="Validate all journals before execution"),
+    dry_run: bool = Field(False, description="Simulate the operation without making changes"),
+    account: Optional[str] = Field(None, description="Account alias (uses default if not specified)")
+) -> Dict[str, Any]:
+    """
+    Create multiple journal entries with configurable error handling and validation.
+    
+    Modes:
+    - continue: Process all journals, report individual failures
+    - fail_fast: Stop on first error
+    - atomic: All succeed or all fail (with rollback)
+    
+    Each journal dict should contain: summary, and optional fields like
+    description, dtstart, categories, related_to, etc.
+    """
+    request_id = str(uuid.uuid4())
+    
+    try:
+        # Validate mode
+        if mode not in ["continue", "fail_fast", "atomic"]:
+            raise ValueError(f"Invalid mode '{mode}'. Must be one of: continue, fail_fast, atomic")
+        
+        # Create bulk options
+        bulk_mode = {
+            "continue": BulkOperationMode.CONTINUE_ON_ERROR,
+            "fail_fast": BulkOperationMode.FAIL_FAST,
+            "atomic": BulkOperationMode.ATOMIC
+        }[mode]
+        
+        options = BulkOptions(
+            mode=bulk_mode,
+            max_parallel=max_parallel,
+            validate_before_execute=validate_before_execute,
+            dry_run=dry_run
+        )
+        
+        # Execute bulk operation
+        result = bulk_manager.bulk_create_journals(calendar_uid, journals, options, account)
+        
+        return {
+            "success": result.failed == 0,
+            "total": result.total,
+            "successful": result.successful,
+            "failed": result.failed,
+            "success_rate": result.success_rate,
+            "duration_ms": result.duration_ms,
+            "results": [
+                {
+                    "index": r.index,
+                    "success": r.success,
+                    "uid": r.uid,
+                    "error": r.error,
+                    "duration_ms": r.duration_ms
+                }
+                for r in result.results
+            ],
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"Chronos error in bulk_create_journals: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Bulk journal creation failed: {str(e)}",
+            details={
+                "tool": "bulk_create_journals",
+                "calendar_uid": calendar_uid,
+                "journal_count": len(journals),
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in bulk_create_journals: {chronos_error}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+@mcp.tool
+async def bulk_delete_journals(
+    calendar_uid: str = Field(..., description="Calendar UID"),
+    journal_uids: List[str] = Field(..., description="List of journal UIDs to delete"),
+    mode: str = Field("continue", description="Operation mode: continue or fail_fast"),
+    max_parallel: int = Field(5, description="Maximum parallel operations"),
+    dry_run: bool = Field(False, description="Simulate the operation without making changes"),
+    account: Optional[str] = Field(None, description="Account alias")
+) -> Dict[str, Any]:
+    """Delete multiple journal entries efficiently."""
+    request_id = str(uuid.uuid4())
+    
+    try:
+        # Validate mode
+        if mode not in ["continue", "fail_fast"]:
+            raise ValueError(f"Invalid mode '{mode}'. Must be one of: continue, fail_fast")
+        
+        # Create bulk options
+        bulk_mode = {
+            "continue": BulkOperationMode.CONTINUE_ON_ERROR,
+            "fail_fast": BulkOperationMode.FAIL_FAST
+        }[mode]
+        
+        options = BulkOptions(
+            mode=bulk_mode,
+            max_parallel=max_parallel,
+            dry_run=dry_run
+        )
+        
+        # Execute bulk operation
+        result = bulk_manager.bulk_delete_journals(calendar_uid, journal_uids, options)
+        
+        return {
+            "success": result.failed == 0,
+            "total": result.total,
+            "successful": result.successful,
+            "failed": result.failed,
+            "success_rate": result.success_rate,
+            "duration_ms": result.duration_ms,
+            "results": [
+                {
+                    "index": r.index,
+                    "success": r.success,
+                    "uid": r.uid,
+                    "error": r.error,
+                    "duration_ms": r.duration_ms
+                }
+                for r in result.results
+            ],
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"Chronos error in bulk_delete_journals: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Bulk journal deletion failed: {str(e)}",
+            details={
+                "tool": "bulk_delete_journals",
+                "calendar_uid": calendar_uid,
+                "journal_count": len(journal_uids),
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in bulk_delete_journals: {chronos_error}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+# ============= Journal Management Tools =============
+
+@mcp.tool
+async def create_journal(
+    calendar_uid: str = Field(..., description="Calendar UID"),
+    summary: str = Field(..., description="Journal title/summary"),
+    description: Optional[str] = Field(None, description="Journal content"),
+    dtstart: Optional[str] = Field(None, description="Journal entry date/time (ISO format)"),
+    related_to: Optional[List[str]] = Field(None, description="List of related component UIDs"),
+    account: Optional[str] = Field(None, description="Account alias")
+) -> Dict[str, Any]:
+    """Create a new journal entry"""
+    from .utils import parse_datetime
+    from .validation import InputValidator, ValidationError
+    
+    request_id = str(uuid.uuid4())
+    
+    try:
+        # Validate and sanitize text inputs
+        try:
+            summary = InputValidator.validate_text_field(summary, 'summary', required=True)
+            if description:
+                description = InputValidator.validate_text_field(description, 'description')
+        except ValidationError as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+        
+        # Parse dtstart if provided
+        dtstart_dt = None
+        if dtstart:
+            dtstart_dt = parse_datetime(dtstart)
+        
+        journal = journal_manager.create_journal(
+            calendar_uid=calendar_uid,
+            summary=summary,
+            description=description,
+            dtstart=dtstart_dt,
+            related_to=related_to,
+            account_alias=account,
+            request_id=request_id
+        )
+        
+        return {
+            "success": True,
+            "journal": {
+                "uid": journal.uid,
+                "summary": journal.summary,
+                "description": journal.description,
+                "dtstart": journal.dtstart.isoformat(),
+                "categories": journal.categories,
+                "related_to": journal.related_to
+            },
+            "request_id": request_id
+        }
+        
+    except (CalendarNotFoundError, EventCreationError) as e:
+        e.request_id = request_id
+        logger.error(f"Journal creation error: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"Create journal failed: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Failed to create journal: {str(e)}",
+            details={
+                "tool": "create_journal",
+                "summary": summary,
+                "calendar_uid": calendar_uid,
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in create_journal: {chronos_error}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+@mcp.tool
+async def list_journals(
+    calendar_uid: str = Field(..., description="Calendar UID"),
+    account: Optional[str] = Field(None, description="Account alias")
+) -> Dict[str, Any]:
+    """List all journals in a calendar"""
+    request_id = str(uuid.uuid4())
+    
+    try:
+        journals = journal_manager.list_journals(
+            calendar_uid=calendar_uid,
+            account_alias=account,
+            request_id=request_id
+        )
+        
+        return {
+            "journals": [
+                {
+                    "uid": journal.uid,
+                    "summary": journal.summary,
+                    "description": journal.description,
+                    "dtstart": journal.dtstart.isoformat(),
+                    "categories": journal.categories
+                }
+                for journal in journals
+            ],
+            "total": len(journals),
+            "request_id": request_id
+        }
+        
+    except CalendarNotFoundError as e:
+        e.request_id = request_id
+        logger.error(f"Calendar not found for list_journals: {e}")
+        
+        return {
+            "journals": [],
+            "total": 0,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"List journals failed: {e}")
+        
+        return {
+            "journals": [],
+            "total": 0,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Failed to list journals: {str(e)}",
+            details={
+                "tool": "list_journals",
+                "calendar_uid": calendar_uid,
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in list_journals: {chronos_error}")
+        
+        return {
+            "journals": [],
+            "total": 0,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+@mcp.tool
+async def update_journal(
+    calendar_uid: str = Field(..., description="Calendar UID"),
+    journal_uid: str = Field(..., description="Journal UID to update"),
+    summary: Optional[str] = Field(None, description="Journal title/summary"),
+    description: Optional[str] = Field(None, description="Journal content"),
+    dtstart: Optional[str] = Field(None, description="Journal entry date/time (ISO format)"),
+    account: Optional[str] = Field(None, description="Account alias")
+) -> Dict[str, Any]:
+    """Update an existing journal. Only provided fields will be updated."""
+    from .utils import parse_datetime
+    from .validation import InputValidator, ValidationError
+    
+    request_id = str(uuid.uuid4())
+    
+    try:
+        # Validate text inputs if provided
+        try:
+            if summary is not None:
+                summary = InputValidator.validate_text_field(summary, 'summary', required=True)
+            if description is not None:
+                description = InputValidator.validate_text_field(description, 'description')
+        except ValidationError as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "error_code": "VALIDATION_ERROR",
+                "request_id": request_id
+            }
+        
+        # Parse dtstart if provided
+        dtstart_dt = None
+        if dtstart is not None:
+            dtstart_dt = parse_datetime(dtstart) if dtstart else None
+        
+        updated_journal = journal_manager.update_journal(
+            journal_uid=journal_uid,
+            calendar_uid=calendar_uid,
+            summary=summary,
+            description=description,
+            dtstart=dtstart_dt,
+            account_alias=account,
+            request_id=request_id
+        )
+        
+        return {
+            "success": True,
+            "journal": {
+                "uid": updated_journal.uid,
+                "summary": updated_journal.summary,
+                "description": updated_journal.description,
+                "dtstart": updated_journal.dtstart.isoformat(),
+                "categories": updated_journal.categories
+            },
+            "message": f"Journal '{journal_uid}' updated successfully",
+            "request_id": request_id
+        }
+        
+    except EventNotFoundError as e:
+        e.request_id = request_id
+        logger.error(f"Journal not found for update: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except (CalendarNotFoundError, EventCreationError) as e:
+        e.request_id = request_id
+        logger.error(f"Update journal failed: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"Update journal failed: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Failed to update journal: {str(e)}",
+            details={
+                "tool": "update_journal",
+                "journal_uid": journal_uid,
+                "calendar_uid": calendar_uid,
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in update_journal: {chronos_error}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(chronos_error),
+            "error_code": chronos_error.error_code,
+            "request_id": request_id
+        }
+
+
+@mcp.tool
+async def delete_journal(
+    calendar_uid: str = Field(..., description="Calendar UID"),
+    journal_uid: str = Field(..., description="Journal UID to delete"),
+    account: Optional[str] = Field(None, description="Account alias")
+) -> Dict[str, Any]:
+    """Delete a journal"""
+    request_id = str(uuid.uuid4())
+    
+    try:
+        journal_manager.delete_journal(
+            calendar_uid=calendar_uid,
+            journal_uid=journal_uid,
+            account_alias=account,
+            request_id=request_id
+        )
+        
+        return {
+            "success": True,
+            "message": f"Journal '{journal_uid}' deleted successfully",
+            "request_id": request_id
+        }
+        
+    except EventNotFoundError as e:
+        e.request_id = request_id
+        logger.error(f"Journal not found for deletion: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except CalendarNotFoundError as e:
+        e.request_id = request_id
+        logger.error(f"Calendar not found for journal deletion: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except ChronosError as e:
+        e.request_id = request_id
+        logger.error(f"Delete journal failed: {e}")
+        
+        return {
+            "success": False,
+            "error": ErrorSanitizer.get_user_friendly_message(e),
+            "error_code": e.error_code,
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        chronos_error = ChronosError(
+            message=f"Failed to delete journal: {str(e)}",
+            details={
+                "tool": "delete_journal",
+                "journal_uid": journal_uid,
+                "calendar_uid": calendar_uid,
+                "original_error": str(e),
+                "original_type": type(e).__name__
+            },
+            request_id=request_id
+        )
+        logger.error(f"Unexpected error in delete_journal: {chronos_error}")
         
         return {
             "success": False,

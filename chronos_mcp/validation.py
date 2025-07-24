@@ -7,6 +7,7 @@ import unicodedata
 from datetime import datetime
 
 from .exceptions import ValidationError, AccountAlreadyExistsError
+from .models import TaskStatus
 
 
 class InputValidator:
@@ -283,3 +284,150 @@ class InputValidator:
             raise ValidationError("RRULE too complex (exceeds 500 characters)")
         
         return rrule
+    
+    @classmethod
+    def validate_task(cls, task_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and sanitize task data."""
+        sanitized = {}
+        
+        if not task_data.get('summary'):
+            raise ValidationError("Task summary is required")
+        
+        sanitized['summary'] = cls.validate_text_field(
+            task_data['summary'], 'summary', required=True
+        )
+        
+        if 'description' in task_data:
+            sanitized['description'] = cls.validate_text_field(
+                task_data['description'], 'description'
+            )
+        
+        if 'due' in task_data and task_data['due'] is not None:
+            sanitized['due'] = cls.validate_datetime(task_data['due'], 'due')
+        
+        if 'priority' in task_data and task_data['priority'] is not None:
+            sanitized['priority'] = cls.validate_priority(task_data['priority'])
+        
+        if 'status' in task_data and task_data['status'] is not None:
+            sanitized['status'] = cls.validate_task_status(task_data['status'])
+        
+        if 'percent_complete' in task_data and task_data['percent_complete'] is not None:
+            sanitized['percent_complete'] = cls.validate_percent_complete(task_data['percent_complete'])
+        
+        if 'uid' in task_data:
+            sanitized['uid'] = cls.validate_uid(task_data['uid'])
+            
+        if 'related_to' in task_data:
+            sanitized['related_to'] = cls.validate_related_to(task_data['related_to'])
+        
+        return sanitized
+    
+    @classmethod
+    def validate_journal(cls, journal_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and sanitize journal data."""
+        sanitized = {}
+        
+        if not journal_data.get('summary'):
+            raise ValidationError("Journal summary is required")
+        
+        sanitized['summary'] = cls.validate_text_field(
+            journal_data['summary'], 'summary', required=True
+        )
+        
+        if 'description' in journal_data:
+            sanitized['description'] = cls.validate_text_field(
+                journal_data['description'], 'description'
+            )
+        
+        if 'dtstart' in journal_data and journal_data['dtstart'] is not None:
+            sanitized['dtstart'] = cls.validate_datetime(journal_data['dtstart'], 'dtstart')
+        
+        if 'categories' in journal_data:
+            sanitized['categories'] = cls.validate_categories(journal_data['categories'])
+        
+        if 'uid' in journal_data:
+            sanitized['uid'] = cls.validate_uid(journal_data['uid'])
+            
+        if 'related_to' in journal_data:
+            sanitized['related_to'] = cls.validate_related_to(journal_data['related_to'])
+        
+        return sanitized
+    
+    @classmethod
+    def validate_priority(cls, priority: Any) -> int:
+        """Validate task priority (1-9, RFC 5545 compliant)."""
+        try:
+            priority_val = int(priority)
+        except (ValueError, TypeError):
+            raise ValidationError("Priority must be an integer")
+        
+        if priority_val < 1 or priority_val > 9:
+            raise ValidationError("Priority must be between 1-9 (1 is highest)")
+        
+        return priority_val
+    
+    @classmethod
+    def validate_task_status(cls, status: Any) -> TaskStatus:
+        """Validate task status."""
+        if isinstance(status, TaskStatus):
+            return status
+        
+        try:
+            return TaskStatus(str(status))
+        except ValueError:
+            valid_statuses = [s.value for s in TaskStatus]
+            raise ValidationError(f"Invalid task status. Must be one of: {valid_statuses}")
+    
+    @classmethod
+    def validate_percent_complete(cls, percent: Any) -> int:
+        """Validate percent complete (0-100)."""
+        try:
+            percent_val = int(percent)
+        except (ValueError, TypeError):
+            raise ValidationError("Percent complete must be an integer")
+        
+        if percent_val < 0 or percent_val > 100:
+            raise ValidationError("Percent complete must be between 0-100")
+        
+        return percent_val
+    
+    @classmethod
+    def validate_categories(cls, categories: Any) -> List[str]:
+        """Validate categories list."""
+        if not isinstance(categories, list):
+            if isinstance(categories, str):
+                # Single category as string
+                categories = [categories]
+            else:
+                raise ValidationError("Categories must be a list or string")
+        
+        validated_categories = []
+        for category in categories:
+            if not isinstance(category, str):
+                raise ValidationError("Each category must be a string")
+            
+            category_clean = cls.validate_text_field(str(category), 'category')
+            if category_clean:  # Only add non-empty categories
+                validated_categories.append(category_clean)
+        
+        return validated_categories
+    
+    @classmethod
+    def validate_related_to(cls, related_to: Any) -> List[str]:
+        """Validate RELATED-TO UIDs list."""
+        if not isinstance(related_to, list):
+            if isinstance(related_to, str):
+                # Single UID as string
+                related_to = [related_to]
+            else:
+                raise ValidationError("RELATED-TO must be a list or string")
+        
+        validated_uids = []
+        for uid in related_to:
+            if not isinstance(uid, str):
+                raise ValidationError("Each RELATED-TO UID must be a string")
+            
+            validated_uid = cls.validate_uid(uid)
+            validated_uids.append(validated_uid)
+        
+        return validated_uids

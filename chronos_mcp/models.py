@@ -104,6 +104,7 @@ class Event(BaseModel):
     account_alias: str = Field(..., description="Associated account alias")
     categories: List[str] = Field(default_factory=list, description="Event categories/tags")
     url: Optional[str] = Field(None, description="Associated URL")
+    related_to: List[str] = Field(default_factory=list, description="Related component UIDs")
     
     
 class Task(BaseModel):
@@ -117,5 +118,18 @@ class Task(BaseModel):
     status: TaskStatus = Field(TaskStatus.NEEDS_ACTION, description="Task status")
     percent_complete: int = Field(0, description="Completion percentage (0-100)")
     categories: List[str] = Field(default_factory=list, description="Task categories/tags")
+    related_to: List[str] = Field(default_factory=list, description="Related component UIDs")
+    calendar_uid: str = Field(..., description="Parent calendar UID")
+    account_alias: str = Field(..., description="Associated account alias")
+
+
+class Journal(BaseModel):
+    """Calendar journal entry (VJOURNAL)"""
+    uid: str = Field(..., description="Journal unique identifier")
+    summary: str = Field(..., description="Journal title/summary")
+    description: Optional[str] = Field(None, description="Journal content")
+    dtstart: datetime = Field(..., description="Journal entry date/time")
+    categories: List[str] = Field(default_factory=list, description="Journal categories/tags")
+    related_to: List[str] = Field(default_factory=list, description="Related component UIDs")
     calendar_uid: str = Field(..., description="Parent calendar UID")
     account_alias: str = Field(..., description="Associated account alias")

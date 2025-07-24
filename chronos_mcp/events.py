@@ -53,6 +53,7 @@ class EventManager:
                     attendees: Optional[List[Dict[str, Any]]] = None,
                     alarm_minutes: Optional[int] = None,
                     recurrence_rule: Optional[str] = None,
+                    related_to: Optional[List[str]] = None,
                     account_alias: Optional[str] = None,
                     request_id: Optional[str] = None) -> Optional[Event]:
         """Create a new event - raises exceptions on failure"""
@@ -113,6 +114,11 @@ class EventManager:
                         'PARTSTAT': att.get('status', 'NEEDS-ACTION'),
                         'RSVP': 'TRUE' if att.get('rsvp', True) else 'FALSE'
                     })
+            
+            # Add RELATED-TO properties
+            if related_to:
+                for related_uid in related_to:
+                    event.add('related-to', related_uid)
                     
             # Add alarm if specified
             if alarm_minutes:
@@ -141,7 +147,8 @@ class EventManager:
                 location=location,
                 calendar_uid=calendar_uid,
                 account_alias=account_alias or self._get_default_account() or "default",
-                recurrence_rule=recurrence_rule
+                recurrence_rule=recurrence_rule,
+                related_to=related_to or []
             )
             
             # Add attendees to model

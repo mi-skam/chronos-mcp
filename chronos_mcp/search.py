@@ -1,6 +1,6 @@
-"""Event search functionality for Chronos MCP."""
+"""CalDAV component search functionality for Chronos MCP (Events, Tasks, Journals)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 import re
@@ -9,9 +9,10 @@ import time
 
 @dataclass
 class SearchOptions:
-    """Options for event search functionality."""
+    """Options for CalDAV component search functionality."""
     query: str
     fields: List[str]
+    component_types: List[str] = field(default_factory=lambda: ['VEVENT'])
     case_sensitive: bool = False
     match_type: str = 'contains'
     use_regex: bool = False
@@ -24,29 +25,71 @@ class SearchOptions:
         if self.match_type not in valid_types:
             raise ValueError(f"match_type must be one of {valid_types}")
         
+        valid_components = ['VEVENT', 'VTODO', 'VJOURNAL']
+        for comp_type in self.component_types:
+            if comp_type not in valid_components:
+                raise ValueError(f"component_type must be one of {valid_components}")
+        
+        # Set default fields based on component types if not provided
         if not self.fields:
-            self.fields = ['summary', 'description', 'location']
+            self.fields = self._get_default_fields()
         
         if self.use_regex or self.match_type == 'regex':
             flags = 0 if self.case_sensitive else re.IGNORECASE
             self.pattern = re.compile(self.query, flags)
-
-
-def search_events(events: List[Dict[str, Any]], options: SearchOptions) -> List[Dict[str, Any]]:
-    """Search events based on provided options."""
-    if not options.query and not (options.date_start or options.date_end):
-        return events
     
-    def matches_text(event: Dict[str, Any]) -> bool:
+    def _get_default_fields(self) -> List[str]:
+        """Get default search fields based on component types."""
+        fields = set(['summary', 'description'])  # Common fields
+        
+        if 'VEVENT' in self.component_types:
+            fields.update(['location'])
+        
+        if 'VTODO' in self.component_types:
+            fields.update(['due', 'priority', 'status', 'percent_complete'])
+        
+        if 'VJOURNAL' in self.component_types:
+            fields.update(['dtstart', 'categories'])
+        
+        return list(fields)
+
+
+def _matches_component_type(component: Dict[str, Any], options: SearchOptions) -> bool:
+    """Check if component matches the requested component types."""
+    component_type = component.get('component_type', 'VEVENT')  # Default to VEVENT for backward compatibility
+    
+    # For legacy support, try to infer component type from fields
+    if component_type == 'VEVENT' and not component.get('component_type'):
+        if 'due' in component or 'priority' in component or 'percent_complete' in component:
+            component_type = 'VTODO'
+        elif 'dtstart' in component and 'categories' in component and not component.get('dtend'):
+            component_type = 'VJOURNAL'
+    
+    return component_type in options.component_types
+
+
+def search_components(components: List[Dict[str, Any]], options: SearchOptions) -> List[Dict[str, Any]]:
+    """Search CalDAV components (events, tasks, journals) based on provided options."""
+    if not options.query and not (options.date_start or options.date_end):
+        # Filter by component type even if no query
+        return [comp for comp in components if _matches_component_type(comp, options)]
+    
+    def matches_text(component: Dict[str, Any]) -> bool:
         if not options.query:
             return True
             
         for field in options.fields:
-            value = event.get(field, '')
+            value = component.get(field, '')
             if value is None:
                 continue
                 
-            value_str = str(value)
+            # Handle special field formatting
+            if field == 'categories' and isinstance(value, list):
+                value_str = ' '.join(str(v) for v in value)
+            elif field in ['priority', 'percent_complete'] and value is not None:
+                value_str = str(value)
+            else:
+                value_str = str(value)
             
             if not options.case_sensitive:
                 value_str = value_str.lower()
@@ -72,27 +115,35 @@ def search_events(events: List[Dict[str, Any]], options: SearchOptions) -> List[
         
         return False
     
-    def matches_date(event: Dict[str, Any]) -> bool:
+    def matches_date(component: Dict[str, Any]) -> bool:
         if not (options.date_start or options.date_end):
             return True
-            
-        event_start = event.get('dtstart')
-        if not event_start:
-            return False
-            
-        if isinstance(event_start, str):
-            event_start = datetime.fromisoformat(event_start.replace('Z', '+00:00'))
         
-        if options.date_start and event_start < options.date_start:
+        # Try different date fields based on component type
+        date_field = None
+        if component.get('component_type') == 'VTODO' or 'due' in component:
+            date_field = component.get('due')
+        elif component.get('component_type') == 'VJOURNAL' or ('dtstart' in component and not component.get('dtend')):
+            date_field = component.get('dtstart')
+        else:  # VEVENT
+            date_field = component.get('dtstart') or component.get('start')
+        
+        if not date_field:
             return False
-        if options.date_end and event_start > options.date_end:
+            
+        if isinstance(date_field, str):
+            date_field = datetime.fromisoformat(date_field.replace('Z', '+00:00'))
+        
+        if options.date_start and date_field < options.date_start:
+            return False
+        if options.date_end and date_field > options.date_end:
             return False
             
         return True
     
     results = [
-        event for event in events
-        if matches_text(event) and matches_date(event)
+        component for component in components
+        if _matches_component_type(component, options) and matches_text(component) and matches_date(component)
     ]
     
     if options.max_results:
@@ -101,7 +152,7 @@ def search_events(events: List[Dict[str, Any]], options: SearchOptions) -> List[
     return results
 
 
-def calculate_relevance_score(event: Dict[str, Any], 
+def calculate_relevance_score(component: Dict[str, Any], 
                             options: SearchOptions,
                             current_time: datetime = None) -> float:
     """Calculate relevance score for search ranking."""
@@ -114,18 +165,31 @@ def calculate_relevance_score(event: Dict[str, Any],
     field_weights = {
         'summary': 3.0,
         'description': 2.0,
-        'location': 1.0
+        'location': 1.0,
+        'due': 2.5,
+        'priority': 1.5,
+        'status': 1.0,
+        'percent_complete': 1.0,
+        'dtstart': 2.0,
+        'categories': 1.5
     }
     
     for field in options.fields:
         if field not in field_weights:
             continue
             
-        value = event.get(field, '')
+        value = component.get(field, '')
         if not value:
             continue
+        
+        # Handle special field formatting for scoring
+        if field == 'categories' and isinstance(value, list):
+            value_str = ' '.join(str(v) for v in value)
+        elif field in ['priority', 'percent_complete'] and value is not None:
+            value_str = str(value)
+        else:
+            value_str = str(value)
             
-        value_str = str(value)
         if not options.case_sensitive:
             value_str = value_str.lower()
         
@@ -153,13 +217,20 @@ def calculate_relevance_score(event: Dict[str, Any],
         
         score += field_score * field_weights.get(field, 1.0)
     
-    # Recency boost
-    event_start = event.get('dtstart')
-    if event_start:
-        if isinstance(event_start, str):
-            event_start = datetime.fromisoformat(event_start.replace('Z', '+00:00'))
+    # Recency boost - use appropriate date field based on component type
+    date_field = None
+    if component.get('component_type') == 'VTODO' or 'due' in component:
+        date_field = component.get('due')
+    elif component.get('component_type') == 'VJOURNAL' or ('dtstart' in component and not component.get('dtend')):
+        date_field = component.get('dtstart')
+    else:  # VEVENT
+        date_field = component.get('dtstart') or component.get('start')
+    
+    if date_field:
+        if isinstance(date_field, str):
+            date_field = datetime.fromisoformat(date_field.replace('Z', '+00:00'))
         
-        days_diff = abs((current_time - event_start).days)
+        days_diff = abs((current_time - date_field).days)
         if days_diff <= 30:
             recency_boost = 0.1 * (1.0 - days_diff / 30.0)
             score *= (1.0 + recency_boost)
@@ -167,19 +238,55 @@ def calculate_relevance_score(event: Dict[str, Any],
     return score
 
 
-def search_events_ranked(events: List[Dict[str, Any]], 
-                        options: SearchOptions) -> List[Tuple[Dict[str, Any], float]]:
-    """Search events and return them with relevance scores."""
-    matching_events = search_events(events, options)
+def search_components_ranked(components: List[Dict[str, Any]], 
+                           options: SearchOptions) -> List[Tuple[Dict[str, Any], float]]:
+    """Search CalDAV components and return them with relevance scores."""
+    matching_components = search_components(components, options)
     
-    scored_events = []
-    for event in matching_events:
-        score = calculate_relevance_score(event, options)
-        scored_events.append((event, score))
+    scored_components = []
+    for component in matching_components:
+        score = calculate_relevance_score(component, options)
+        scored_components.append((component, score))
     
-    scored_events.sort(key=lambda x: x[1], reverse=True)
+    scored_components.sort(key=lambda x: x[1], reverse=True)
     
     if options.max_results:
-        scored_events = scored_events[:options.max_results]
+        scored_components = scored_components[:options.max_results]
     
-    return scored_events
+    return scored_components
+
+
+# Backward compatibility functions
+def search_events(events: List[Dict[str, Any]], options: SearchOptions) -> List[Dict[str, Any]]:
+    """Search events - backward compatibility wrapper."""
+    # Ensure we're only searching events for backward compatibility
+    event_options = SearchOptions(
+        query=options.query,
+        fields=options.fields,
+        component_types=['VEVENT'],
+        case_sensitive=options.case_sensitive,
+        match_type=options.match_type,
+        use_regex=options.use_regex,
+        date_start=options.date_start,
+        date_end=options.date_end,
+        max_results=options.max_results
+    )
+    return search_components(events, event_options)
+
+
+def search_events_ranked(events: List[Dict[str, Any]], 
+                        options: SearchOptions) -> List[Tuple[Dict[str, Any], float]]:
+    """Search events and return them with relevance scores - backward compatibility wrapper."""
+    # Ensure we're only searching events for backward compatibility
+    event_options = SearchOptions(
+        query=options.query,
+        fields=options.fields,
+        component_types=['VEVENT'],
+        case_sensitive=options.case_sensitive,
+        match_type=options.match_type,
+        use_regex=options.use_regex,
+        date_start=options.date_start,
+        date_end=options.date_end,
+        max_results=options.max_results
+    )
+    return search_components_ranked(events, event_options)

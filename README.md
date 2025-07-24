@@ -33,9 +33,52 @@ A comprehensive Model Context Protocol (MCP) server for CalDAV calendar manageme
   - XSS and injection prevention ✅
   - Path traversal protection ✅
   - RFC-compliant validation ✅
-- **Task Management**: Support for VTODO items (coming soon)
+- **Task Management**: Full VTODO support ✅
+- **Journal Entries**: Full VJOURNAL support ✅
 - **Import/Export**: iCalendar format support (coming soon)
 - **Sync Capabilities**: Calendar synchronization between accounts (coming soon)
+
+
+## 📋 Task Management (VTODO)
+
+Chronos MCP provides comprehensive support for CalDAV tasks:
+
+- **Create tasks** with due dates, priorities, and descriptions
+- **Track progress** with percentage completion (0-100%)
+- **Manage status**: NEEDS-ACTION, IN-PROCESS, COMPLETED, CANCELLED
+- **Create subtasks** using related_to relationships
+- **Bulk operations** for efficient task management
+
+```bash
+# Example: Create a task
+mcp call create_task '{
+  "calendar_uid": "my-calendar",
+  "summary": "Complete project documentation",
+  "due": "2025-02-01T15:00:00Z",
+  "priority": 2
+}'
+```
+
+
+## 📓 Journal Entries (VJOURNAL)
+
+Keep detailed records with CalDAV journal entries:
+
+- **Create journal entries** with timestamps and rich descriptions
+- **Link related entries** using related_to relationships
+- **Organize with categories** for better searchability
+- **Update and manage** existing journal entries
+
+```bash
+# Example: Create a journal entry
+mcp call create_journal '{
+  "calendar_uid": "my-calendar",
+  "summary": "Team Meeting Notes",
+  "description": "Discussed Q1 objectives..."
+}'
+```
+
+For detailed usage, see [VTODO/VJOURNAL Guide](docs/VTODO_VJOURNAL_GUIDE.md).
 
 
 ## 🔐 Security
