@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2025-07-24
+
+### Added
+- **Full VTODO (Tasks) Support**
+  - Complete task management with create, update, delete, and list operations
+  - Task priorities (1-9 scale, with 1 being highest)
+  - Task status tracking (NEEDS-ACTION, IN-PROCESS, COMPLETED, CANCELLED)
+  - Progress tracking with percentage completion (0-100%)
+  - Due date management
+  - Subtask relationships using related_to field
+  - Bulk task operations with atomic transaction support
+- **Full VJOURNAL (Journal Entries) Support**
+  - Journal entry creation with timestamps and rich descriptions
+  - Update and delete functionality for existing entries
+  - Category support for organization
+  - Related entry linking using related_to field
+  - Bulk journal operations with efficient batch processing
+- **Enhanced Bulk Operations**
+  - Extended bulk operations to support tasks and journals
+  - Atomic mode with automatic rollback on failure
+  - Parallel execution with configurable concurrency
+  - Dry-run mode for all bulk operations
+  - Detailed operation results with timing metrics
+- **Improved Search Functionality**
+  - Extended search to include tasks and journal entries
+  - Enhanced search algorithms for better performance
+  - Support for searching across all component types
+- **Enhanced Validation**
+  - Comprehensive validation for all integer parameters
+  - Improved date handling across all components
+  - Better error messages with clear remediation steps
+- **Documentation**
+  - Comprehensive VTODO/VJOURNAL implementation guide
+  - Updated API documentation with new endpoints
+  - Examples for all new functionality
+
+### Changed
+- Major version bump to 2.0.0 due to significant new features
+- Enhanced models to support new component types
+- Improved server architecture to handle multiple component types
+- Better separation of concerns across modules
+
+### Fixed
+- Integer parameter validation across all endpoints
+- Date parsing edge cases for all-day events
+- Bulk operation error handling improvements
+
+### Security
+- Enhanced input validation for new component types
+- Improved sanitization for journal entry content
+- Better protection against malformed iCalendar data
+
 ## [1.0.0-rc1] - 2025-07-05
 
 ### Added
