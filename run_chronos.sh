@@ -22,4 +22,4 @@ source venv/bin/activate
 pip install -e . -q >&2 2>&1
 
 # Run the server with exec for proper signal handling
-exec python -m chronos_mcp.server
+exec python3 -m chronos_mcp.server
