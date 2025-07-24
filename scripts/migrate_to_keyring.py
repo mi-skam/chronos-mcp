@@ -27,7 +27,9 @@ try:
     from chronos_mcp.logging_config import setup_logging
 except ImportError:
     print("Error: Could not import chronos_mcp modules.")
-    print("Make sure you're running this from the project root or have chronos_mcp installed.")
+    print(
+        "Make sure you're running this from the project root or have chronos_mcp installed."
+    )
     sys.exit(1)
 
 logger = setup_logging()
@@ -40,126 +42,128 @@ def create_backup(config_file: Path) -> Path:
     shutil.copy2(config_file, backup_file)
     return backup_file
 
+
 def migrate_passwords(dry_run: bool = False) -> int:
     """
     Migrate passwords from config file to keyring.
-    
+
     Args:
         dry_run: If True, only show what would be done without making changes
-        
+
     Returns:
         Exit code (0 for success, 1 for errors)
     """
     config_dir = Path.home() / ".chronos"
     config_file = config_dir / "accounts.json"
-    
+
     # Check if config file exists
     if not config_file.exists():
         print(f"No config file found at {config_file}")
         print("Nothing to migrate.")
         return 0
-    
+
     # Get credential manager
     cred_manager = get_credential_manager()
-    
+
     # Check keyring availability
     status = cred_manager.get_status()
     if not status["keyring_available"]:
         print("❌ Error: Keyring is not available on this system.")
         print("   Cannot migrate passwords to keyring.")
         print(f"   Status: {status}")
-        return 1    
+        return 1
     print(f"✓ Keyring available: {status['backend_type']}")
     print(f"  Backend: {status['backend']}")
     print(f"  Secure: {'Yes' if status['secure'] else 'No'}")
     print()
-    
+
     # Load config file
     try:
-        with open(config_file, 'r') as f:
+        with open(config_file, "r") as f:
             config_data = json.load(f)
     except Exception as e:
         print(f"❌ Error reading config file: {e}")
         return 1
-    
-    accounts = config_data.get('accounts', {})
+
+    accounts = config_data.get("accounts", {})
     if not accounts:
         print("No accounts found in config file.")
         return 0
-    
+
     print(f"Found {len(accounts)} account(s) to process:")
     print()
-    
+
     # Process each account
     migrated_count = 0
     error_count = 0
-    
+
     for alias, account_data in accounts.items():
         print(f"Processing account: {alias}")
-        
+
         # Check if password exists in config
-        password = account_data.get('password')
+        password = account_data.get("password")
         if not password:
-            print(f"  ⚠️  No password in config file")
+            print("  ⚠️  No password in config file")
             continue
-        
+
         if dry_run:
             print(f"  🔍 Would migrate password ({len(password)} chars)")
             migrated_count += 1
         else:
             # Store password in keyring
             if cred_manager.set_password(alias, password):
-                print(f"  ✓ Password migrated to keyring")
+                print("  ✓ Password migrated to keyring")
                 migrated_count += 1
-                
+
                 # Verify it was stored correctly
                 retrieved = cred_manager.get_password(alias)
                 if retrieved != password:
-                    print(f"  ❌ Verification failed - passwords don't match!")
+                    print("  ❌ Verification failed - passwords don't match!")
                     error_count += 1
             else:
-                print(f"  ❌ Failed to store password in keyring")
+                print("  ❌ Failed to store password in keyring")
                 error_count += 1
-    
+
     print()
-    
+
     if error_count > 0:
         print(f"❌ Errors occurred during migration: {error_count} account(s) failed")
         return 1
-    
+
     if migrated_count == 0:
         print("No passwords to migrate.")
-        return 0    
+        return 0
     # Create backup and update config file
     if not dry_run and migrated_count > 0:
-        print(f"Creating backup...")
+        print("Creating backup...")
         backup_file = create_backup(config_file)
         print(f"  ✓ Backup created: {backup_file}")
-        
+
         # Remove passwords from config
-        print(f"Updating config file...")
+        print("Updating config file...")
         for alias in accounts:
-            if 'password' in accounts[alias]:
-                del accounts[alias]['password']
-        
+            if "password" in accounts[alias]:
+                del accounts[alias]["password"]
+
         # Save updated config
         try:
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 json.dump(config_data, f, indent=2)
-            print(f"  ✓ Config file updated (passwords removed)")
+            print("  ✓ Config file updated (passwords removed)")
         except Exception as e:
             print(f"  ❌ Error updating config file: {e}")
             print(f"  Restore from backup: {backup_file}")
             return 1
-    
+
     print()
     print(f"✅ Migration complete: {migrated_count} password(s) migrated")
-    
+
     if dry_run:
         print()
         print("This was a dry run. Run without --dry-run to perform actual migration.")
-    
+
     return 0
+
 
 def main():
     """Main entry point."""
@@ -169,15 +173,15 @@ def main():
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show what would be done without making changes"
+        help="Show what would be done without making changes",
     )
-    
+
     args = parser.parse_args()
-    
+
     print("Chronos MCP Password Migration")
     print("=" * 40)
     print()
-    
+
     exit_code = migrate_passwords(dry_run=args.dry_run)
     sys.exit(exit_code)
 

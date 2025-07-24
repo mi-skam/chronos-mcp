@@ -1,14 +1,14 @@
 """
 Test configuration and fixtures for Chronos MCP
 """
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from datetime import datetime
 import pytz
-from chronos_mcp.models import Account, Calendar, Event, Attendee
+from chronos_mcp.models import Account, Calendar, Event
 from chronos_mcp.config import ConfigManager
 import tempfile
-import json
 from pathlib import Path
 
 
@@ -22,7 +22,7 @@ def temp_config_dir():
 @pytest.fixture
 def mock_config_manager(temp_config_dir):
     """Mock ConfigManager with temp directory"""
-    with patch('chronos_mcp.config.Path.home') as mock_home:
+    with patch("chronos_mcp.config.Path.home") as mock_home:
         mock_home.return_value = temp_config_dir
         config_mgr = ConfigManager()
         yield config_mgr
@@ -36,7 +36,7 @@ def sample_account():
         url="https://caldav.example.com",
         username="testuser",
         password="testpass",
-        display_name="Test Account"
+        display_name="Test Account",
     )
 
 
@@ -49,7 +49,7 @@ def sample_calendar():
         description="A test calendar",
         color="#FF0000",
         account_alias="test_account",
-        url="https://caldav.example.com/calendars/test"
+        url="https://caldav.example.com/calendars/test",
     )
 
 
@@ -65,25 +65,25 @@ def sample_event():
         end=datetime(2025, 7, 5, 11, 0, tzinfo=pytz.UTC),
         all_day=False,
         calendar_uid="cal-123",
-        account_alias="test_account"
+        account_alias="test_account",
     )
 
 
 @pytest.fixture
 def mock_caldav_client():
     """Mock CalDAV client"""
-    with patch('caldav.DAVClient') as mock_client:
+    with patch("caldav.DAVClient") as mock_client:
         mock_instance = Mock()
         mock_client.return_value = mock_instance
-        
+
         # Mock principal
         mock_principal = Mock()
         mock_instance.principal.return_value = mock_principal
-        
+
         # Mock calendars
         mock_calendar = Mock()
         mock_calendar.name = "Test Calendar"
         mock_calendar.url = "https://caldav.example.com/cal"
         mock_principal.calendars.return_value = [mock_calendar]
-        
+
         yield mock_instance

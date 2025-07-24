@@ -1,12 +1,18 @@
 """
 Unit tests for Chronos MCP models
 """
+
 import pytest
 from datetime import datetime
 import pytz
 from chronos_mcp.models import (
-    Account, AccountStatus, Calendar, Event, 
-    Attendee, AttendeeRole, AttendeeStatus, EventStatus
+    Account,
+    AccountStatus,
+    Calendar,
+    Event,
+    Attendee,
+    AttendeeRole,
+    AttendeeStatus,
 )
 
 
@@ -21,20 +27,14 @@ class TestAccount:
     def test_account_without_password(self):
         """Test creating account without password"""
         account = Account(
-            alias="no_pass",
-            url="https://caldav.example.com",
-            username="user"
+            alias="no_pass", url="https://caldav.example.com", username="user"
         )
         assert account.password is None
 
     def test_account_url_validation(self):
         """Test URL validation"""
         with pytest.raises(ValueError):
-            Account(
-                alias="bad_url",
-                url="not-a-url",
-                username="user"
-            )
+            Account(alias="bad_url", url="not-a-url", username="user")
 
 
 class TestCalendar:
@@ -47,11 +47,7 @@ class TestCalendar:
 
     def test_calendar_minimal(self):
         """Test calendar with minimal fields"""
-        cal = Calendar(
-            uid="minimal",
-            name="Minimal Calendar",
-            account_alias="test"
-        )
+        cal = Calendar(uid="minimal", name="Minimal Calendar", account_alias="test")
         assert cal.description is None
         assert cal.color is None
 
@@ -72,7 +68,7 @@ class TestEvent:
             end=datetime(2025, 7, 6, tzinfo=pytz.UTC),
             all_day=True,
             calendar_uid="cal-123",
-            account_alias="test"
+            account_alias="test",
         )
         assert event.all_day is True
 
@@ -82,7 +78,7 @@ class TestEvent:
             email="attendee@example.com",
             name="Test Attendee",
             role=AttendeeRole.REQ_PARTICIPANT,
-            status=AttendeeStatus.ACCEPTED
+            status=AttendeeStatus.ACCEPTED,
         )
         event = Event(
             uid="meeting-123",
@@ -91,7 +87,7 @@ class TestEvent:
             end=datetime.now(pytz.UTC),
             attendees=[attendee],
             calendar_uid="cal-123",
-            account_alias="test"
+            account_alias="test",
         )
         assert len(event.attendees) == 1
         assert event.attendees[0].email == "attendee@example.com"
