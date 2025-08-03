@@ -14,7 +14,7 @@ from icalendar import Journal as iJournal
 from .calendars import CalendarManager
 from .exceptions import (CalendarNotFoundError, ChronosError,
                          EventCreationError, EventDeletionError,
-                         EventNotFoundError)
+                         JournalNotFoundError)
 from .logging_config import setup_logging
 from .models import Journal
 from .utils import ical_to_datetime
@@ -181,9 +181,9 @@ class JournalManager:
                 )
 
             # Journal not found
-            raise EventNotFoundError(journal_uid, calendar_uid, request_id=request_id)
+            raise JournalNotFoundError(journal_uid, calendar_uid, request_id=request_id)
 
-        except EventNotFoundError:
+        except JournalNotFoundError:
             raise
         except Exception as e:
             logger.error(
@@ -197,6 +197,7 @@ class JournalManager:
     def list_journals(
         self,
         calendar_uid: str,
+        limit: Optional[int] = None,
         account_alias: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> List[Journal]:
@@ -277,6 +278,10 @@ class JournalManager:
                     f"Error listing journals: {e}", extra={"request_id": request_id}
                 )
 
+        # Apply limit if specified
+        if limit and len(journals) > limit:
+            journals = journals[:limit]
+
         return journals
 
     def update_journal(
@@ -334,7 +339,7 @@ class JournalManager:
                     )
 
             if not caldav_journal:
-                raise EventNotFoundError(
+                raise JournalNotFoundError(
                     journal_uid, calendar_uid, request_id=request_id
                 )
 
@@ -394,7 +399,7 @@ class JournalManager:
                 caldav_journal, calendar_uid, account_alias
             )
 
-        except EventNotFoundError:
+        except JournalNotFoundError:
             raise
         except EventCreationError:
             raise
@@ -464,9 +469,9 @@ class JournalManager:
                 )
 
             # Journal not found
-            raise EventNotFoundError(journal_uid, calendar_uid, request_id=request_id)
+            raise JournalNotFoundError(journal_uid, calendar_uid, request_id=request_id)
 
-        except EventNotFoundError:
+        except JournalNotFoundError:
             raise
         except caldav.lib.error.AuthorizationError as e:
             logger.error(

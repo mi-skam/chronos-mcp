@@ -193,6 +193,28 @@ class EventNotFoundError(CalDAVError):
         )
 
 
+class TaskNotFoundError(CalDAVError):
+    """Raised when a task is not found"""
+
+    def __init__(self, task_uid: str, calendar_uid: str, **kwargs):
+        super().__init__(
+            f"Task '{task_uid}' not found in calendar '{calendar_uid}'",
+            details={"task_uid": task_uid, "calendar_uid": calendar_uid},
+            **kwargs,
+        )
+
+
+class JournalNotFoundError(CalDAVError):
+    """Raised when a journal entry is not found"""
+
+    def __init__(self, journal_uid: str, calendar_uid: str, **kwargs):
+        super().__init__(
+            f"Journal '{journal_uid}' not found in calendar '{calendar_uid}'",
+            details={"journal_uid": journal_uid, "calendar_uid": calendar_uid},
+            **kwargs,
+        )
+
+
 class EventCreationError(CalDAVError):
     """Raised when event creation fails"""
 
@@ -441,6 +463,8 @@ class ErrorSanitizer:
             "AccountNotFoundError": "The specified account was not found.",
             "CalendarNotFoundError": "The specified calendar was not found.",
             "EventNotFoundError": "The specified event was not found.",
+            "TaskNotFoundError": "The specified task was not found.",
+            "JournalNotFoundError": "The specified journal entry was not found.",
             "AccountConnectionError": "Could not connect to the calendar server. Please check the server URL.",
             "CalendarCreationError": "Could not create the calendar. It may already exist.",
             "EventCreationError": "Could not create the event. Please check all required fields.",

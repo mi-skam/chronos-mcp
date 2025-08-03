@@ -14,7 +14,7 @@ from icalendar import Todo as iTodo
 from .calendars import CalendarManager
 from .exceptions import (CalendarNotFoundError, ChronosError,
                          EventCreationError, EventDeletionError,
-                         EventNotFoundError)
+                         TaskNotFoundError)
 from .logging_config import setup_logging
 from .models import Task, TaskStatus
 from .utils import ical_to_datetime
@@ -187,9 +187,9 @@ class TaskManager:
                 )
 
             # Task not found
-            raise EventNotFoundError(task_uid, calendar_uid, request_id=request_id)
+            raise TaskNotFoundError(task_uid, calendar_uid, request_id=request_id)
 
-        except EventNotFoundError:
+        except TaskNotFoundError:
             raise
         except Exception as e:
             logger.error(
@@ -201,6 +201,7 @@ class TaskManager:
     def list_tasks(
         self,
         calendar_uid: str,
+        status_filter: Optional[TaskStatus] = None,
         account_alias: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> List[Task]:
@@ -281,6 +282,14 @@ class TaskManager:
                     f"Error listing tasks: {e}", extra={"request_id": request_id}
                 )
 
+        # Filter by status if requested
+        if status_filter:
+            tasks = [task for task in tasks if task.status == status_filter]
+            logger.debug(
+                f"Filtered tasks by status {status_filter.value}: {len(tasks)} tasks",
+                extra={"request_id": request_id},
+            )
+
         return tasks
 
     def update_task(
@@ -341,7 +350,7 @@ class TaskManager:
                     )
 
             if not caldav_task:
-                raise EventNotFoundError(task_uid, calendar_uid, request_id=request_id)
+                raise TaskNotFoundError(task_uid, calendar_uid, request_id=request_id)
 
             # Parse existing task data
             ical = iCalendar.from_ical(caldav_task.data)
@@ -411,7 +420,7 @@ class TaskManager:
             # Parse and return the updated task
             return self._parse_caldav_task(caldav_task, calendar_uid, account_alias)
 
-        except EventNotFoundError:
+        except TaskNotFoundError:
             raise
         except EventCreationError:
             raise
@@ -479,9 +488,9 @@ class TaskManager:
                 )
 
             # Task not found
-            raise EventNotFoundError(task_uid, calendar_uid, request_id=request_id)
+            raise TaskNotFoundError(task_uid, calendar_uid, request_id=request_id)
 
-        except EventNotFoundError:
+        except TaskNotFoundError:
             raise
         except caldav.lib.error.AuthorizationError as e:
             logger.error(
