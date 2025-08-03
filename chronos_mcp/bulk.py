@@ -1,5 +1,6 @@
 """Bulk operations for Chronos MCP."""
 
+import concurrent.futures
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -401,14 +402,12 @@ class BulkOperationManager:
         options: BulkOptions,
         account_alias: Optional[str] = None,
     ) -> List[OperationResult]:
-        """Execute a batch of create operations in parallel."""
-        results = []
-
-        # Use the provided event manager
+        """Execute a batch of create operations in parallel using ThreadPoolExecutor."""
         if not self.event_manager:
             raise ValueError("EventManager not provided to BulkOperationManager")
 
-        for idx, event in enumerate(batch):
+        def create_single_event(idx_event_tuple):
+            idx, event = idx_event_tuple
             op_start = time.time()
             try:
                 # Create the event using EventManager
@@ -427,25 +426,47 @@ class BulkOperationManager:
                     account_alias=account_alias,
                 )
 
-                results.append(
-                    OperationResult(
-                        index=start_idx + idx,
-                        success=True,
-                        uid=created_event.uid,
-                        duration_ms=(time.time() - op_start) * 1000,
-                    )
+                return OperationResult(
+                    index=start_idx + idx,
+                    success=True,
+                    uid=created_event.uid,
+                    duration_ms=(time.time() - op_start) * 1000,
                 )
             except Exception as e:
-                results.append(
-                    OperationResult(
-                        index=start_idx + idx,
-                        success=False,
-                        error=str(e),
-                        duration_ms=(time.time() - op_start) * 1000,
-                    )
+                return OperationResult(
+                    index=start_idx + idx,
+                    success=False,
+                    error=str(e),
+                    duration_ms=(time.time() - op_start) * 1000,
                 )
 
-        return results
+        # Use ThreadPoolExecutor for parallel processing
+        indexed_batch = list(enumerate(batch))
+        with self.executor:
+            future_to_idx = {
+                self.executor.submit(create_single_event, idx_event): idx
+                for idx, idx_event in enumerate(indexed_batch)
+            }
+
+            results = [None] * len(batch)  # Pre-allocate results list
+
+            for future in concurrent.futures.as_completed(future_to_idx):
+                try:
+                    result = future.result()
+                    # Maintain original order based on batch index
+                    batch_idx = result.index - start_idx
+                    results[batch_idx] = result
+                except Exception as e:
+                    # Handle executor-level exceptions
+                    batch_idx = future_to_idx[future]
+                    results[batch_idx] = OperationResult(
+                        index=start_idx + batch_idx,
+                        success=False,
+                        error=f"Executor error: {e}",
+                        duration_ms=0,
+                    )
+
+        return [r for r in results if r is not None]
 
     def _execute_batch_create_tasks(
         self,
@@ -571,8 +592,9 @@ class BulkOperationManager:
             for uid in uids:
                 try:
                     self.event_manager.delete_event(calendar_uid, uid)
-                except:
-                    pass
+                    logger.debug(f"Successfully rolled back event {uid}")
+                except Exception as e:
+                    logger.warning(f"Failed to rollback event {uid}: {e}")
 
     def _rollback_created_tasks(self, calendar_uid: str, uids: List[str]):
         """Rollback created tasks in case of atomic operation failure."""
@@ -581,8 +603,9 @@ class BulkOperationManager:
             for uid in uids:
                 try:
                     self.task_manager.delete_task(calendar_uid, uid)
-                except:
-                    pass
+                    logger.debug(f"Successfully rolled back task {uid}")
+                except Exception as e:
+                    logger.warning(f"Failed to rollback task {uid}: {e}")
 
     def _rollback_created_journals(self, calendar_uid: str, uids: List[str]):
         """Rollback created journals in case of atomic operation failure."""
@@ -591,8 +614,9 @@ class BulkOperationManager:
             for uid in uids:
                 try:
                     self.journal_manager.delete_journal(calendar_uid, uid)
-                except:
-                    pass
+                    logger.debug(f"Successfully rolled back journal {uid}")
+                except Exception as e:
+                    logger.warning(f"Failed to rollback journal {uid}: {e}")
 
     def bulk_delete_events(
         self, calendar_uid: str, event_uids: List[str], options: BulkOptions = None

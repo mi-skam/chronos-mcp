@@ -3,6 +3,7 @@ Account management for Chronos MCP
 """
 
 import threading
+import time
 import uuid
 from typing import Dict, Optional
 
@@ -21,13 +22,15 @@ logger = setup_logging()
 
 
 class AccountManager:
-    """Manage CalDAV account connections"""
+    """Manage CalDAV account connections with lifecycle management"""
 
     def __init__(self, config_manager: ConfigManager):
         self.config = config_manager
         self.connections: Dict[str, DAVClient] = {}
         self.principals: Dict[str, Principal] = {}
         self._connection_locks: Dict[str, threading.Lock] = {}
+        self._connection_timestamps: Dict[str, float] = {}
+        self._connection_ttl_minutes: int = 30  # Connection TTL in minutes
 
     def connect_account(self, alias: str, request_id: Optional[str] = None) -> bool:
         """Connect to a CalDAV account - raises exceptions on failure"""
@@ -54,9 +57,14 @@ class AccountManager:
             # Test connection by getting principal
             principal = client.principal()
 
-            # Store connection
+            # Store connection with timestamp
             self.connections[alias] = client
             self.principals[alias] = principal
+            self._connection_timestamps[alias] = time.time()
+
+            # Ensure lock exists for this connection
+            if alias not in self._connection_locks:
+                self._connection_locks[alias] = threading.Lock()
 
             # Update account status
             account.status = AccountStatus.CONNECTED
@@ -82,15 +90,49 @@ class AccountManager:
             raise AccountConnectionError(alias, original_error=e, request_id=request_id)
 
     def disconnect_account(self, alias: str):
-        """Disconnect from an account"""
+        """Disconnect from an account and clean up resources"""
         if alias in self.connections:
             del self.connections[alias]
         if alias in self.principals:
             del self.principals[alias]
+        if alias in self._connection_timestamps:
+            del self._connection_timestamps[alias]
+        if alias in self._connection_locks:
+            del self._connection_locks[alias]
 
         account = self.config.get_account(alias)
         if account:
             account.status = AccountStatus.DISCONNECTED
+
+        logger.debug(f"Disconnected and cleaned up resources for account '{alias}'")
+
+    def cleanup_stale_connections(self, max_age_minutes: Optional[int] = None):
+        """Remove connections older than max_age_minutes"""
+        max_age = max_age_minutes or self._connection_ttl_minutes
+        current_time = time.time()
+        stale_aliases = []
+
+        for alias, timestamp in self._connection_timestamps.items():
+            age_minutes = (current_time - timestamp) / 60
+            if age_minutes > max_age:
+                stale_aliases.append(alias)
+
+        for alias in stale_aliases:
+            logger.debug(
+                f"Cleaning up stale connection for account '{alias}' (age: {age_minutes:.1f} minutes)"
+            )
+            self.disconnect_account(alias)
+
+        if stale_aliases:
+            logger.info(f"Cleaned up {len(stale_aliases)} stale connections")
+
+    def _is_connection_stale(self, alias: str) -> bool:
+        """Check if a connection is stale"""
+        if alias not in self._connection_timestamps:
+            return True
+
+        age_minutes = (time.time() - self._connection_timestamps[alias]) / 60
+        return age_minutes > self._connection_ttl_minutes
 
     @ErrorHandler.safe_operation(logger, default_return=None)
     def get_connection(self, alias: Optional[str] = None) -> Optional[DAVClient]:
@@ -98,7 +140,14 @@ class AccountManager:
         if not alias:
             alias = self.config.config.default_account
 
-        if alias and alias not in self.connections:
+        if alias and (
+            alias not in self.connections or self._is_connection_stale(alias)
+        ):
+            # Clean up stale connection if it exists
+            if alias in self.connections and self._is_connection_stale(alias):
+                logger.debug(f"Connection for '{alias}' is stale, reconnecting")
+                self.disconnect_account(alias)
+
             # Use thread lock to prevent race conditions in connection creation
             if alias not in self._connection_locks:
                 self._connection_locks[alias] = threading.Lock()
@@ -116,7 +165,12 @@ class AccountManager:
         if not alias:
             alias = self.config.config.default_account
 
-        if alias and alias not in self.principals:
+        if alias and (alias not in self.principals or self._is_connection_stale(alias)):
+            # Clean up stale connection if it exists
+            if alias in self.principals and self._is_connection_stale(alias):
+                logger.debug(f"Principal for '{alias}' is stale, reconnecting")
+                self.disconnect_account(alias)
+
             # Use thread lock to prevent race conditions in connection creation
             if alias not in self._connection_locks:
                 self._connection_locks[alias] = threading.Lock()

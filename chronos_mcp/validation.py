@@ -32,45 +32,39 @@ class InputValidator:
         "color": re.compile(r"^#[0-9A-Fa-f]{6}$"),
     }
 
+    # ReDoS-safe patterns with simplified regex and input length limits
+    MAX_VALIDATION_LENGTH = 10000  # Pre-filter before regex validation
+
     DANGEROUS_PATTERNS = [
-        # Script tags (various forms)
-        re.compile(r"<script[^>]*>.*?</script>", re.IGNORECASE | re.DOTALL),
-        re.compile(r"<script\s+[^>]*>", re.IGNORECASE),
-        re.compile(r"<\s*script[^>]*>", re.IGNORECASE),
-        # JavaScript protocols
-        re.compile(
-            r'(?:href|src|action|formaction|data)\s*=\s*["\']?\s*javascript:',
-            re.IGNORECASE,
-        ),
+        # Script tags (simplified, non-backtracking)
+        re.compile(r"<script\b", re.IGNORECASE),
+        re.compile(r"</script\s*>", re.IGNORECASE),
+        # JavaScript protocols (simplified)
         re.compile(r"javascript\s*:", re.IGNORECASE),
-        # Event handlers
-        re.compile(r'\bon\w+\s*=\s*["\'][^"\']*["\']', re.IGNORECASE),
-        re.compile(r'\bon\w+\s*=\s*[^"\'\s>]+', re.IGNORECASE),
-        # Data URIs with script content
-        re.compile(r"data\s*:\s*[^;]*;\s*base64", re.IGNORECASE),
-        re.compile(r"data\s*:\s*text/html", re.IGNORECASE),
-        # Control characters
+        re.compile(r"vbscript\s*:", re.IGNORECASE),
+        re.compile(r"data\s*:", re.IGNORECASE),
+        # Event handlers (simplified, non-greedy)
+        re.compile(r"\bon\w+\s*=", re.IGNORECASE),
+        # Dangerous HTML elements (simplified)
+        re.compile(
+            r"<(?:iframe|frame|object|embed|applet|form|meta|link)\b", re.IGNORECASE
+        ),
+        # Expression and eval patterns (simplified)
+        re.compile(r"\bexpression\s*\(", re.IGNORECASE),
+        re.compile(r"\beval\s*\(", re.IGNORECASE),
+        re.compile(r"\bsetTimeout\s*\(", re.IGNORECASE),
+        re.compile(r"\bsetInterval\s*\(", re.IGNORECASE),
+        # Control characters (unchanged - safe pattern)
         re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]"),
-        # Dangerous HTML elements
-        re.compile(r"<(?:iframe|frame|object|embed|applet|form)[^>]*>", re.IGNORECASE),
-        re.compile(r"<(?:meta|link)[^>]+(?:http-equiv|rel)[^>]*>", re.IGNORECASE),
-        # Expression and eval patterns
-        re.compile(r"expression\s*\(", re.IGNORECASE),
-        re.compile(r"eval\s*\(", re.IGNORECASE),
-        re.compile(r"setTimeout\s*\(", re.IGNORECASE),
-        re.compile(r"setInterval\s*\(", re.IGNORECASE),
-        # Encoded/obfuscated patterns
+        # Encoded patterns (simplified)
         re.compile(r"&#[xX]?[0-9a-fA-F]+;"),
         re.compile(r"%[0-9a-fA-F]{2}"),
         re.compile(r"\\u[0-9a-fA-F]{4}", re.IGNORECASE),
-        # CSS injection patterns
-        re.compile(r"@import", re.IGNORECASE),
-        re.compile(r'url\s*\(\s*["\']?\s*javascript:', re.IGNORECASE),
-        # SVG XSS patterns
-        re.compile(r"<svg[^>]*>", re.IGNORECASE),
-        re.compile(r"<foreignobject[^>]*>", re.IGNORECASE),
-        # Special protocol handlers
-        re.compile(r"(?:vbscript|mocha|livescript|data):", re.IGNORECASE),
+        # CSS injection (simplified)
+        re.compile(r"@import\b", re.IGNORECASE),
+        # SVG patterns (simplified)
+        re.compile(r"<svg\b", re.IGNORECASE),
+        re.compile(r"<foreignobject\b", re.IGNORECASE),
     ]
 
     @classmethod
@@ -158,6 +152,12 @@ class InputValidator:
 
         value = str(value).strip()
 
+        # Pre-filter: Reject extremely long inputs before regex validation
+        if len(value) > cls.MAX_VALIDATION_LENGTH:
+            raise ValidationError(
+                f"{field_name} exceeds maximum validation length of {cls.MAX_VALIDATION_LENGTH} characters"
+            )
+
         max_length = cls.MAX_LENGTHS.get(field_name, 1000)
         if len(value) > max_length:
             raise ValidationError(
@@ -171,6 +171,12 @@ class InputValidator:
         test_values = [value, cls._decode_and_normalize(value)]
 
         for test_val in test_values:
+            # Additional length check after decoding
+            if len(test_val) > cls.MAX_VALIDATION_LENGTH:
+                raise ValidationError(
+                    f"{field_name} contains excessively long decoded content"
+                )
+
             for pattern in cls.DANGEROUS_PATTERNS:
                 if pattern.search(test_val):
                     raise ValidationError(

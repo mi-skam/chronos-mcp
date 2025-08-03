@@ -2,6 +2,7 @@
 Unit tests for account management
 """
 
+import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -131,6 +132,8 @@ class TestAccountManager:
         # Should return principal when connected
         mock_principal = Mock()
         mgr.principals["test_account"] = mock_principal
+        # Add timestamp to prevent stale connection check
+        mgr._connection_timestamps["test_account"] = time.time()
 
         principal = mgr.get_principal("test_account")
         assert principal == mock_principal
