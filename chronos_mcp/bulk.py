@@ -1,15 +1,19 @@
 """Bulk operations for Chronos MCP."""
 
 import concurrent.futures
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
+from .logging_config import setup_logging
 from .models import TaskStatus
 from .utils import parse_datetime
+
+logger = setup_logging()
 
 
 class BulkOperationMode(Enum):
@@ -29,6 +33,10 @@ class BulkOptions:
     timeout_per_operation: int = 30
     validate_before_execute: bool = True
     dry_run: bool = False
+    adaptive_scaling: bool = True  # Enable adaptive parallel scaling
+    backpressure_threshold_ms: float = 1000.0  # Reduce parallelism if ops take longer
+    min_parallel: int = 1
+    max_parallel_limit: int = 20
 
 
 @dataclass
@@ -64,13 +72,57 @@ class BulkResult:
 
 
 class BulkOperationManager:
-    """Manages bulk CalDAV operations."""
+    """Manages bulk CalDAV operations with adaptive concurrency control."""
 
     def __init__(self, event_manager=None, task_manager=None, journal_manager=None):
         self.event_manager = event_manager
         self.task_manager = task_manager
         self.journal_manager = journal_manager
-        self.executor = ThreadPoolExecutor(max_workers=10)
+        self.executor = ThreadPoolExecutor(max_workers=20)
+
+        # Adaptive concurrency control
+        self._performance_tracker = {}
+        self._backpressure_lock = threading.Lock()
+
+    def _calculate_adaptive_parallelism(
+        self, options: BulkOptions, operation_type: str, recent_performance: List[float]
+    ) -> int:
+        """Calculate optimal parallelism based on recent performance"""
+        if not options.adaptive_scaling or not recent_performance:
+            return options.max_parallel
+
+        # Calculate average operation time
+        avg_time_ms = sum(recent_performance) / len(recent_performance)
+
+        if avg_time_ms > options.backpressure_threshold_ms:
+            # Operations are slow, reduce parallelism
+            new_parallel = max(options.min_parallel, options.max_parallel // 2)
+        elif avg_time_ms < options.backpressure_threshold_ms / 2:
+            # Operations are fast, increase parallelism
+            new_parallel = min(options.max_parallel_limit, options.max_parallel + 2)
+        else:
+            # Operations are within acceptable range
+            new_parallel = options.max_parallel
+
+        return new_parallel
+
+    def _track_operation_performance(self, operation_type: str, duration_ms: float):
+        """Track operation performance for adaptive scaling"""
+        with self._backpressure_lock:
+            if operation_type not in self._performance_tracker:
+                self._performance_tracker[operation_type] = []
+
+            perf_list = self._performance_tracker[operation_type]
+            perf_list.append(duration_ms)
+
+            # Keep only last 50 measurements for sliding window
+            if len(perf_list) > 50:
+                perf_list.pop(0)
+
+    def _get_recent_performance(self, operation_type: str) -> List[float]:
+        """Get recent performance measurements"""
+        with self._backpressure_lock:
+            return self._performance_tracker.get(operation_type, []).copy()
 
     def bulk_create_events(
         self,
@@ -114,14 +166,28 @@ class BulkOperationManager:
             result.successful = len(events)
         else:
             created_uids = []
+            current_parallel = options.max_parallel
 
-            for batch_start in range(0, len(events), options.max_parallel):
-                batch_end = min(batch_start + options.max_parallel, len(events))
+            for batch_start in range(0, len(events), current_parallel):
+                # Adaptive scaling - adjust parallelism based on performance
+                if options.adaptive_scaling and batch_start > 0:
+                    recent_perf = self._get_recent_performance("create_event")
+                    current_parallel = self._calculate_adaptive_parallelism(
+                        options, "create_event", recent_perf
+                    )
+
+                batch_end = min(batch_start + current_parallel, len(events))
                 batch = events[batch_start:batch_end]
 
                 batch_results = self._execute_batch_create(
                     calendar_uid, batch, batch_start, options, account_alias
                 )
+
+                # Track batch performance
+                for op_result in batch_results:
+                    self._track_operation_performance(
+                        "create_event", op_result.duration_ms
+                    )
 
                 for op_result in batch_results:
                     result.results.append(op_result)
@@ -318,7 +384,7 @@ class BulkOperationManager:
                 )
                 if end < start:
                     errors.append((idx, "End time before start time"))
-            except:
+            except Exception:
                 errors.append((idx, "Invalid date format"))
 
         return errors
@@ -368,7 +434,7 @@ class BulkOperationManager:
                 try:
                     if isinstance(due, str):
                         datetime.fromisoformat(due.replace("Z", "+00:00"))
-                except:
+                except Exception:
                     errors.append((idx, "Invalid due date format"))
 
         return errors
@@ -389,7 +455,7 @@ class BulkOperationManager:
                 try:
                     if isinstance(dtstart, str):
                         datetime.fromisoformat(dtstart.replace("Z", "+00:00"))
-                except:
+                except Exception:
                     errors.append((idx, "Invalid dtstart date format"))
 
         return errors
@@ -439,31 +505,55 @@ class BulkOperationManager:
                     duration_ms=(time.time() - op_start) * 1000,
                 )
 
-        # Use ThreadPoolExecutor for parallel processing
+        # Use ThreadPoolExecutor with timeout control
         indexed_batch = list(enumerate(batch))
-        with self.executor:
+        with ThreadPoolExecutor(max_workers=len(batch)) as executor:
             future_to_idx = {
-                self.executor.submit(create_single_event, idx_event): idx
+                executor.submit(create_single_event, idx_event): idx
                 for idx, idx_event in enumerate(indexed_batch)
             }
 
-            results = [None] * len(batch)  # Pre-allocate results list
+            results: List[Optional[OperationResult]] = [None] * len(batch)
 
-            for future in concurrent.futures.as_completed(future_to_idx):
-                try:
-                    result = future.result()
-                    # Maintain original order based on batch index
-                    batch_idx = result.index - start_idx
-                    results[batch_idx] = result
-                except Exception as e:
-                    # Handle executor-level exceptions
-                    batch_idx = future_to_idx[future]
-                    results[batch_idx] = OperationResult(
-                        index=start_idx + batch_idx,
-                        success=False,
-                        error=f"Executor error: {e}",
-                        duration_ms=0,
-                    )
+            try:
+                for future in concurrent.futures.as_completed(
+                    future_to_idx, timeout=options.timeout_per_operation * len(batch)
+                ):
+                    try:
+                        result = future.result(timeout=options.timeout_per_operation)
+                        # Maintain original order based on batch index
+                        batch_idx = result.index - start_idx
+                        results[batch_idx] = result
+                    except concurrent.futures.TimeoutError:
+                        # Handle individual operation timeout
+                        batch_idx = future_to_idx[future]
+                        results[batch_idx] = OperationResult(
+                            index=start_idx + batch_idx,
+                            success=False,
+                            error=f"Operation timeout after {options.timeout_per_operation}s",
+                            duration_ms=options.timeout_per_operation * 1000,
+                        )
+                    except Exception as e:
+                        # Handle executor-level exceptions
+                        batch_idx = future_to_idx[future]
+                        results[batch_idx] = OperationResult(
+                            index=start_idx + batch_idx,
+                            success=False,
+                            error=f"Executor error: {e}",
+                            duration_ms=0,
+                        )
+            except concurrent.futures.TimeoutError:
+                # Handle batch-level timeout
+                for idx, future in enumerate(future_to_idx.keys()):
+                    if not future.done():
+                        future.cancel()
+                        if results[idx] is None:
+                            results[idx] = OperationResult(
+                                index=start_idx + idx,
+                                success=False,
+                                error="Batch operation timeout",
+                                duration_ms=0,
+                            )
 
         return [r for r in results if r is not None]
 

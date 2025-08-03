@@ -12,12 +12,8 @@ from icalendar import Calendar as iCalendar
 from icalendar import Event as iEvent
 
 from .calendars import CalendarManager
-from .exceptions import (
-    CalendarNotFoundError,
-    EventCreationError,
-    EventDeletionError,
-    EventNotFoundError,
-)
+from .exceptions import (CalendarNotFoundError, EventCreationError,
+                         EventDeletionError, EventNotFoundError)
 from .logging_config import setup_logging
 from .models import Alarm, Attendee, Event
 from .utils import ical_to_datetime, validate_rrule

@@ -2,7 +2,7 @@
 Unit tests for bulk operations
 """
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock
 
 from chronos_mcp.bulk import (BulkOperationManager, BulkOperationMode,
                               BulkOptions, BulkResult, OperationResult)
@@ -18,6 +18,10 @@ class TestBulkOptions:
         assert opts.timeout_per_operation == 30
         assert opts.validate_before_execute is True
         assert opts.dry_run is False
+        assert opts.adaptive_scaling is True
+        assert opts.backpressure_threshold_ms == 1000.0
+        assert opts.min_parallel == 1
+        assert opts.max_parallel_limit == 20
 
     def test_bulk_operation_modes(self):
         """Test different bulk operation modes"""
@@ -245,3 +249,117 @@ class TestBulkDelete:
         failures = result.get_failures()
         assert len(failures) == 1
         assert "Event not found" in failures[0].error
+
+    def test_adaptive_scaling_performance_tracking(self):
+        """Test that performance metrics are tracked for adaptive scaling"""
+        bulk_manager = BulkOperationManager()
+
+        # Track some performance data
+        bulk_manager._track_operation_performance("create_event", 500.0)
+        bulk_manager._track_operation_performance("create_event", 1500.0)
+        bulk_manager._track_operation_performance("create_event", 750.0)
+
+        recent_perf = bulk_manager._get_recent_performance("create_event")
+        assert len(recent_perf) == 3
+        assert 500.0 in recent_perf
+        assert 1500.0 in recent_perf
+        assert 750.0 in recent_perf
+
+    def test_adaptive_scaling_parallelism_calculation(self):
+        """Test adaptive parallelism calculation based on performance"""
+        bulk_manager = BulkOperationManager()
+        options = BulkOptions(max_parallel=10, backpressure_threshold_ms=1000.0)
+
+        # Test fast operations - should increase parallelism
+        fast_performance = [200.0, 300.0, 250.0]  # All under threshold/2
+        new_parallel = bulk_manager._calculate_adaptive_parallelism(
+            options, "create_event", fast_performance
+        )
+        assert new_parallel > options.max_parallel  # Should increase
+
+        # Test slow operations - should decrease parallelism
+        slow_performance = [1500.0, 2000.0, 1800.0]  # All over threshold
+        new_parallel = bulk_manager._calculate_adaptive_parallelism(
+            options, "create_event", slow_performance
+        )
+        assert new_parallel == options.max_parallel // 2  # Should decrease
+
+        # Test mixed performance - should stay same
+        mixed_performance = [800.0, 900.0, 700.0]  # Within acceptable range
+        new_parallel = bulk_manager._calculate_adaptive_parallelism(
+            options, "create_event", mixed_performance
+        )
+        assert new_parallel == options.max_parallel  # Should stay same
+
+    def test_adaptive_scaling_disabled(self):
+        """Test that adaptive scaling can be disabled"""
+        bulk_manager = BulkOperationManager()
+        options = BulkOptions(adaptive_scaling=False, max_parallel=5)
+
+        # Even with slow performance, should return original max_parallel
+        slow_performance = [2000.0, 3000.0, 2500.0]
+        new_parallel = bulk_manager._calculate_adaptive_parallelism(
+            options, "create_event", slow_performance
+        )
+        assert new_parallel == options.max_parallel
+
+    def test_performance_tracker_sliding_window(self):
+        """Test that performance tracker maintains sliding window"""
+        bulk_manager = BulkOperationManager()
+
+        # Add more than 50 measurements
+        for i in range(60):
+            bulk_manager._track_operation_performance("create_event", float(i * 10))
+
+        recent_perf = bulk_manager._get_recent_performance("create_event")
+        # Should keep only last 50 measurements
+        assert len(recent_perf) == 50
+        # Should contain the most recent values (590, 580, ... 100)
+        assert 590.0 in recent_perf
+        assert 100.0 in recent_perf
+        assert 90.0 not in recent_perf  # Should have been removed
+
+    def test_bulk_create_with_adaptive_scaling(self):
+        """Test bulk create operations adapt parallelism based on performance"""
+        # Create a larger set of events to test adaptive scaling
+        test_events = [
+            {
+                "summary": f"Event {i}",
+                "dtstart": "2025-07-10T10:00:00",
+                "dtend": "2025-07-10T11:00:00",
+            }
+            for i in range(15)  # More events to trigger multiple batches
+        ]
+
+        mock_event_manager = Mock()
+        bulk_manager = BulkOperationManager(mock_event_manager)
+
+        # Mock successful event creation with varying response times
+        created_events = []
+        for i in range(15):
+            mock_event = Mock()
+            mock_event.uid = f"uid{i}"
+            created_events.append(mock_event)
+
+        mock_event_manager.create_event.side_effect = created_events
+
+        options = BulkOptions(
+            adaptive_scaling=True,
+            max_parallel=5,
+            backpressure_threshold_ms=1000.0,
+        )
+
+        # Simulate some performance data that would trigger scaling
+        for _ in range(10):
+            bulk_manager._track_operation_performance("create_event", 1500.0)  # Slow
+
+        result = bulk_manager.bulk_create_events(
+            calendar_uid="cal123", events=test_events, options=options
+        )
+
+        assert result.total == 15
+        assert result.successful == 15
+        assert result.failed == 0
+
+        # Verify all events were created
+        assert mock_event_manager.create_event.call_count == 15
