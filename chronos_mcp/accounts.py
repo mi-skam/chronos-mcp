@@ -2,6 +2,7 @@
 Account management for Chronos MCP
 """
 
+import threading
 import uuid
 from typing import Dict, Optional
 
@@ -26,6 +27,7 @@ class AccountManager:
         self.config = config_manager
         self.connections: Dict[str, DAVClient] = {}
         self.principals: Dict[str, Principal] = {}
+        self._connection_locks: Dict[str, threading.Lock] = {}
 
     def connect_account(self, alias: str, request_id: Optional[str] = None) -> bool:
         """Connect to a CalDAV account - raises exceptions on failure"""
@@ -97,8 +99,14 @@ class AccountManager:
             alias = self.config.config.default_account
 
         if alias and alias not in self.connections:
-            # Try to connect if not already connected
-            self.connect_account(alias)
+            # Use thread lock to prevent race conditions in connection creation
+            if alias not in self._connection_locks:
+                self._connection_locks[alias] = threading.Lock()
+
+            with self._connection_locks[alias]:
+                # Double-check pattern - connection might have been created by another thread
+                if alias not in self.connections:
+                    self.connect_account(alias)
 
         return self.connections.get(alias) if alias else None
 
@@ -109,8 +117,14 @@ class AccountManager:
             alias = self.config.config.default_account
 
         if alias and alias not in self.principals:
-            # Try to connect if not already connected
-            self.connect_account(alias)
+            # Use thread lock to prevent race conditions in connection creation
+            if alias not in self._connection_locks:
+                self._connection_locks[alias] = threading.Lock()
+
+            with self._connection_locks[alias]:
+                # Double-check pattern - connection might have been created by another thread
+                if alias not in self.principals:
+                    self.connect_account(alias)
 
         return self.principals.get(alias) if alias else None
 

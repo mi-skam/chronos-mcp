@@ -81,7 +81,7 @@ class CredentialManager:
 
                 if password:
                     logger.debug(
-                        f"Retrieved password from keyring for account: {alias}"
+                        "Retrieved password from keyring for account: [REDACTED]"
                     )
                     return password
                 elif fallback_password:
@@ -96,7 +96,7 @@ class CredentialManager:
 
         if fallback_password:
             if not self.keyring_available:
-                logger.debug(f"Using password from config file for account: {alias}")
+                logger.debug("Using password from config file for account: [REDACTED]")
             return fallback_password
 
         return None
@@ -113,13 +113,15 @@ class CredentialManager:
             True if successfully stored, False otherwise
         """
         if not self.keyring_available:
-            logger.debug(f"Keyring not available, cannot store password for: {alias}")
+            logger.debug(
+                "Keyring not available, cannot store password for account: [REDACTED]"
+            )
             return False
 
         try:
             key = self._get_keyring_key(alias)
             keyring.set_password(self.SERVICE_NAME, key, password)
-            logger.info(f"Password stored in keyring for account: {alias}")
+            logger.info("Password stored in keyring for account: [REDACTED]")
             return True
         except Exception as e:
             logger.error(f"Failed to store password in keyring: {e}")
@@ -141,10 +143,10 @@ class CredentialManager:
         try:
             key = self._get_keyring_key(alias)
             keyring.delete_password(self.SERVICE_NAME, key)
-            logger.info(f"Password removed from keyring for account: {alias}")
+            logger.info("Password removed from keyring for account: [REDACTED]")
             return True
         except keyring.errors.PasswordDeleteError:
-            logger.debug(f"No password in keyring for account: {alias}")
+            logger.debug("No password in keyring for account: [REDACTED]")
             return False
         except Exception as e:
             logger.error(f"Failed to delete password from keyring: {e}")

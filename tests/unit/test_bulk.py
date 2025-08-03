@@ -179,7 +179,7 @@ class TestBulkOperationManager:
         mock_event1.uid = "uid1"
         mock_event2 = Mock()
         mock_event2.uid = "uid2"
-        
+
         self.mock_event_manager.create_event.side_effect = [mock_event1, mock_event2]
 
         options = BulkOptions(max_parallel=2)

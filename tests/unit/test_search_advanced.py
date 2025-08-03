@@ -126,7 +126,9 @@ class TestSearchEvents:
         )
 
         assert result["success"] is True
-        assert len(result["matches"]) == 2  # Both "Team Meeting" and "Zoom Meeting" match
+        assert (
+            len(result["matches"]) == 2
+        )  # Both "Team Meeting" and "Zoom Meeting" match
         # Check that both events with "Meeting" are found
         found_uids = {match["uid"] for match in result["matches"]}
         assert "evt-1" in found_uids  # "Team Meeting - Project Review"

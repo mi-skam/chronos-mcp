@@ -64,6 +64,18 @@ async def add_account(
     request_id = str(uuid.uuid4())
 
     try:
+        # Validate inputs before creating account
+        if not InputValidator.PATTERNS["url"].match(url):
+            raise ValidationError("Invalid URL format. Must be HTTPS URL.")
+
+        alias = InputValidator.validate_text_field(alias, "alias", required=True)
+        username = InputValidator.validate_text_field(
+            username, "username", required=True
+        )
+        display_name = InputValidator.validate_text_field(
+            display_name or alias, "display_name"
+        )
+
         account = Account(
             alias=alias,
             url=url,
@@ -244,6 +256,22 @@ async def create_calendar(
     ),
 ) -> Dict[str, Any]:
     """Create a new calendar"""
+    try:
+        # Validate inputs
+        name = InputValidator.validate_text_field(name, "calendar_name", required=True)
+        if description:
+            description = InputValidator.validate_text_field(description, "description")
+        if color and not InputValidator.PATTERNS["color"].match(color):
+            raise ValidationError(
+                "Invalid color format. Must be hex color like #FF0000"
+            )
+        if account:
+            account = InputValidator.validate_text_field(
+                account, "alias", required=False
+            )
+    except ValidationError as e:
+        return {"success": False, "error": str(e)}
+
     calendar = calendar_manager.create_calendar(name, description, color, account)
 
     if calendar:
@@ -270,6 +298,13 @@ async def delete_calendar(
     request_id = str(uuid.uuid4())
 
     try:
+        # Validate inputs
+        calendar_uid = InputValidator.validate_uid(calendar_uid)
+        if account:
+            account = InputValidator.validate_text_field(
+                account, "alias", required=False
+            )
+
         calendar_manager.delete_calendar(calendar_uid, account, request_id=request_id)
 
         return {
