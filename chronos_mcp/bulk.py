@@ -410,7 +410,6 @@ class BulkOperationManager:
             idx, event = idx_event_tuple
             op_start = time.time()
             try:
-                # Create the event using EventManager
                 created_event = self.event_manager.create_event(
                     calendar_uid=calendar_uid,
                     summary=event.get("summary"),
@@ -500,7 +499,6 @@ class BulkOperationManager:
                     else:
                         due_dt = due_value
 
-                # Create the task using TaskManager
                 created_task = self.task_manager.create_task(
                     calendar_uid=calendar_uid,
                     summary=task.get("summary"),

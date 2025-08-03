@@ -167,7 +167,6 @@ async def remove_account(
     request_id = str(uuid.uuid4())
 
     try:
-        # Check if account exists
         if not config_manager.get_account(alias):
             raise AccountNotFoundError(alias, request_id=request_id)
 

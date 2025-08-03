@@ -67,13 +67,11 @@ class JournalManager:
             # Generate UID if not provided
             journal_uid = str(uuid.uuid4())
 
-            # Set required properties
             journal.add("uid", journal_uid)
             journal.add("summary", summary)
             journal.add("dtstart", dtstart)
             journal.add("dtstamp", datetime.now(timezone.utc))
 
-            # Set optional properties
             if description:
                 journal.add("description", description)
 

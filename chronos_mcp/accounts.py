@@ -66,7 +66,6 @@ class AccountManager:
             if alias not in self._connection_locks:
                 self._connection_locks[alias] = threading.Lock()
 
-            # Update account status
             account.status = AccountStatus.CONNECTED
             logger.info(
                 f"Successfully connected to account '{alias}'",

@@ -65,12 +65,10 @@ class TaskManager:
             # Generate UID if not provided
             task_uid = str(uuid.uuid4())
 
-            # Set required properties
             task.add("uid", task_uid)
             task.add("summary", summary)
             task.add("dtstamp", datetime.now(timezone.utc))
 
-            # Set optional properties
             if description:
                 task.add("description", description)
             if due:
@@ -109,7 +107,6 @@ class TaskManager:
                 )
                 caldav_task = calendar.save_event(ical_data)
 
-            # Return Task model
             task_model = Task(
                 uid=task_uid,
                 summary=summary,

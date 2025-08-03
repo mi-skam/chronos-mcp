@@ -16,7 +16,6 @@ def setup_logging():
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
 
-    # Return logger for the calling module
     import inspect
 
     frame = inspect.stack()[1]

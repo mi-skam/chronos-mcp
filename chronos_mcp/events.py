@@ -77,21 +77,18 @@ class EventManager:
                         summary, f"Invalid RRULE: {error_msg}", request_id=request_id
                     )
 
-            # Create iCalendar event
             cal = iCalendar()
             event = iEvent()
 
             # Generate UID if not provided
             event_uid = str(uuid.uuid4())
 
-            # Set required properties
             event.add("uid", event_uid)
             event.add("summary", summary)
             event.add("dtstart", start)
             event.add("dtend", end)
             event.add("dtstamp", datetime.now(timezone.utc))
 
-            # Set optional properties
             if description:
                 event.add("description", description)
             if location:
@@ -99,7 +96,6 @@ class EventManager:
             if recurrence_rule:
                 event.add("rrule", recurrence_rule)
 
-            # Add attendees
             if attendees:
                 for att in attendees:
                     attendee_str = f"mailto:{att['email']}"
@@ -114,12 +110,10 @@ class EventManager:
                         },
                     )
 
-            # Add RELATED-TO properties
             if related_to:
                 for related_uid in related_to:
                     event.add("related-to", related_uid)
 
-            # Add alarm if specified
             if alarm_minutes:
                 from icalendar import Alarm as iAlarm
 
@@ -129,13 +123,11 @@ class EventManager:
                 alarm.add("description", summary)
                 event.add_component(alarm)
 
-            # Add event to calendar
             cal.add_component(event)
 
             # Save to CalDAV server
             caldav_event = calendar.save_event(cal.to_ical().decode("utf-8"))
 
-            # Return Event model
             event_model = Event(
                 uid=event_uid,
                 summary=summary,
