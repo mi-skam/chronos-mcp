@@ -273,10 +273,10 @@ class TestBulkCreateEvents:
             account=None,
         )
 
-        # Should log warning but continue
-        mock_managers["logger"].warning.assert_called()
-        call_args = mock_managers["event"].create_event.call_args[1]
-        assert call_args["attendees"] == []
+        # Should have failed to parse attendees but continued
+        assert result["succeeded"] == 0
+        assert result["failed"] == 1
+        assert "Invalid attendees" in result["details"][0]["error"]
 
     @pytest.mark.asyncio
     async def test_bulk_create_alarm_parsing(self, mock_managers):

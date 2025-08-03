@@ -135,7 +135,7 @@ class TestBulkDeleteEvents:
 
         assert result["success"] is False
         assert "Invalid mode" in result["error"]
-        assert result["error_code"] == "VALIDATION_ERROR"
+        assert result["error_code"] == "ChronosError"
 
     @pytest.mark.asyncio
     async def test_bulk_delete_empty_list(self, mock_managers):

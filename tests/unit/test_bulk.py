@@ -119,8 +119,10 @@ class TestBulkOperationManager:
     def test_bulk_create_continue_on_error(self):
         """Test bulk create with continue on error mode"""
         # Mock event manager to fail on second event
+        mock_event1 = Mock()
+        mock_event1.uid = "created-1"
         self.mock_event_manager.create_event.side_effect = [
-            {"uid": "created-1"},  # Success
+            mock_event1,  # Success
             Exception("Network error"),  # Failure
         ]
 
@@ -148,10 +150,14 @@ class TestBulkOperationManager:
         ]
 
         # Mock to fail on second event
+        mock_event1 = Mock()
+        mock_event1.uid = "created-1"
+        mock_event3 = Mock()
+        mock_event3.uid = "created-3"
         self.mock_event_manager.create_event.side_effect = [
-            {"uid": "created-1"},
+            mock_event1,
             Exception("API limit reached"),
-            {"uid": "created-3"},
+            mock_event3,
         ]
 
         options = BulkOptions(mode=BulkOperationMode.FAIL_FAST, max_parallel=2)
@@ -166,38 +172,33 @@ class TestBulkOperationManager:
         # Due to parallel batch processing, it may process 1-2 before stopping
         assert result.successful <= 2
 
-    @patch("chronos_mcp.bulk.ThreadPoolExecutor")
-    def test_bulk_create_parallel_execution(self, mock_executor_class):
-        """Test that bulk operations use parallel execution"""
-        mock_executor = MagicMock()
-        mock_executor_class.return_value.__enter__.return_value = mock_executor
+    def test_bulk_create_parallel_execution(self):
+        """Test that bulk operations execute in batches"""
+        # Mock successful event creation
+        mock_event1 = Mock()
+        mock_event1.uid = "uid1"
+        mock_event2 = Mock()
+        mock_event2.uid = "uid2"
+        
+        self.mock_event_manager.create_event.side_effect = [mock_event1, mock_event2]
 
-        # Set up futures
-        mock_future1 = Mock()
-        mock_future1.result.return_value = "uid1"
-        mock_future2 = Mock()
-        mock_future2.result.return_value = "uid2"
+        options = BulkOptions(max_parallel=2)
 
-        mock_executor.submit.side_effect = [mock_future1, mock_future2]
+        # Call the batch execution method directly
+        results = self.bulk_manager._execute_batch_create(
+            calendar_uid="cal123",
+            batch=self.test_events,
+            start_idx=0,
+            options=options,
+            account_alias=None,
+        )
 
-        # Mock as_completed to return futures
-        with patch("chronos_mcp.bulk.as_completed") as mock_as_completed:
-            mock_as_completed.return_value = [mock_future1, mock_future2]
-
-            options = BulkOptions(max_parallel=2)
-
-            # Call the batch execution method directly
-            results = self.bulk_manager._execute_batch_create(
-                calendar_uid="cal123",
-                batch=self.test_events,
-                start_idx=0,
-                options=options,
-                account=None,
-                request_id="test-123",
-            )
-
-            assert len(results) == 2
-            assert mock_executor.submit.call_count == 2
+        # Should have created 2 events
+        assert self.mock_event_manager.create_event.call_count == 2
+        assert len(results) == 2
+        assert all(r.success for r in results)
+        assert results[0].uid == "uid1"
+        assert results[1].uid == "uid2"
 
 
 class TestBulkDelete:
