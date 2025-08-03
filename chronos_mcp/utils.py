@@ -3,7 +3,8 @@ Utility functions for Chronos MCP
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple, Union
+
 from dateutil import parser
 from icalendar import Event as iEvent
 

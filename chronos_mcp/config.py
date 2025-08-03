@@ -2,17 +2,17 @@
 Configuration management for Chronos MCP
 """
 
-import os
 import json
+import os
 from pathlib import Path
 from typing import Dict, Optional
+
 from pydantic import BaseModel, Field
 
-from .models import Account
 from .credentials import get_credential_manager
 from .logging_config import setup_logging
+from .models import Account
 
-# Set up logging
 logger = setup_logging()
 
 
@@ -55,13 +55,11 @@ class ConfigManager:
             except Exception as e:
                 logger.error(f"Error loading config file: {e}")
 
-        # Check for environment variables (backward compatibility)
         env_url = os.getenv("CALDAV_BASE_URL")
         env_username = os.getenv("CALDAV_USERNAME")
         env_password = os.getenv("CALDAV_PASSWORD")
 
         if env_url and env_username:
-            # Add environment-based account if not already present
             env_account = Account(
                 alias="default",
                 url=env_url,
@@ -89,7 +87,6 @@ class ConfigManager:
         """Save configuration to file"""
         self.config_dir.mkdir(exist_ok=True)
 
-        # Get credential manager to check keyring availability
         credential_manager = get_credential_manager()
 
         data = {"accounts": {}, "default_account": self.config.default_account}

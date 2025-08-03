@@ -1,9 +1,9 @@
 """CalDAV component search functionality for Chronos MCP (Events, Tasks, Journals)."""
 
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime
 import re
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass

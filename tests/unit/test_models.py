@@ -2,18 +2,13 @@
 Unit tests for Chronos MCP models
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
 import pytz
-from chronos_mcp.models import (
-    Account,
-    AccountStatus,
-    Calendar,
-    Event,
-    Attendee,
-    AttendeeRole,
-    AttendeeStatus,
-)
+
+from chronos_mcp.models import (Account, AccountStatus, Attendee, AttendeeRole,
+                                AttendeeStatus, Calendar, Event)
 
 
 class TestAccount:

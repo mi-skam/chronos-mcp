@@ -4,21 +4,17 @@ Calendar operations for Chronos MCP
 
 import uuid
 from typing import List, Optional
+
 import caldav
 from caldav import Calendar as CalDAVCalendar
 
-from .models import Calendar
 from .accounts import AccountManager
+from .exceptions import (AccountNotFoundError, CalendarCreationError,
+                         CalendarDeletionError, CalendarNotFoundError,
+                         ErrorHandler)
 from .logging_config import setup_logging
-from .exceptions import (
-    AccountNotFoundError,
-    CalendarNotFoundError,
-    CalendarCreationError,
-    CalendarDeletionError,
-    ErrorHandler,
-)
+from .models import Calendar
 
-# Set up logging
 logger = setup_logging()
 
 
@@ -48,9 +44,11 @@ class CalendarManager:
             for cal in principal.calendars():
                 # Extract calendar properties
                 cal_info = Calendar(
-                    uid=str(cal.url).split("/")[-2]
-                    if str(cal.url).endswith("/")
-                    else str(cal.url).split("/")[-1],
+                    uid=(
+                        str(cal.url).split("/")[-2]
+                        if str(cal.url).endswith("/")
+                        else str(cal.url).split("/")[-1]
+                    ),
                     name=cal.name or "Unnamed Calendar",
                     description=None,  # Will need to fetch from properties
                     color=None,  # Will need to fetch from properties
@@ -87,14 +85,12 @@ class CalendarManager:
             )
 
         try:
-            # Create calendar
             cal_id = name.lower().replace(" ", "_")
             cal = principal.make_calendar(name=name, cal_id=cal_id)
 
             # Note: description and color properties would need CalDAV server support
             # for setting calendar properties beyond name
 
-            # Return calendar info
             return Calendar(
                 uid=cal_id,
                 name=name,

@@ -1,11 +1,11 @@
 """Bulk operations for Chronos MCP."""
 
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import List, Dict, Any, Optional, Tuple
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
 
 from .models import TaskStatus
 from .utils import parse_datetime
@@ -572,7 +572,6 @@ class BulkOperationManager:
                 try:
                     self.event_manager.delete_event(calendar_uid, uid)
                 except:
-                    # Log but continue rollback
                     pass
 
     def _rollback_created_tasks(self, calendar_uid: str, uids: List[str]):
@@ -583,7 +582,6 @@ class BulkOperationManager:
                 try:
                     self.task_manager.delete_task(calendar_uid, uid)
                 except:
-                    # Log but continue rollback
                     pass
 
     def _rollback_created_journals(self, calendar_uid: str, uids: List[str]):
@@ -594,7 +592,6 @@ class BulkOperationManager:
                 try:
                     self.journal_manager.delete_journal(calendar_uid, uid)
                 except:
-                    # Log but continue rollback
                     pass
 
     def bulk_delete_events(

@@ -2,14 +2,16 @@
 Unit tests for event management
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
-import pytz
-from icalendar import Event as iEvent, Calendar as iCalendar
+from unittest.mock import MagicMock, Mock, patch
 
-from chronos_mcp.events import EventManager
+import pytest
+import pytz
+from icalendar import Calendar as iCalendar
+from icalendar import Event as iEvent
+
 from chronos_mcp.calendars import CalendarManager
+from chronos_mcp.events import EventManager
 
 
 class TestEventManager:
@@ -301,6 +303,7 @@ END:VEVENT"""
     def test_delete_event_calendar_not_found(self, mock_calendar_manager):
         """Test deleting event when calendar not found"""
         from unittest.mock import ANY
+
         from chronos_mcp.exceptions import CalendarNotFoundError
 
         mock_calendar_manager.get_calendar.return_value = None

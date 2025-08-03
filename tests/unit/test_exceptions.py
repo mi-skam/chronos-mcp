@@ -2,10 +2,7 @@
 Unit tests for Chronos MCP exception handling framework
 """
 
-
-from chronos_mcp.exceptions import (
-    ChronosError,
-)
+from chronos_mcp.exceptions import ChronosError
 
 
 class TestChronosError:

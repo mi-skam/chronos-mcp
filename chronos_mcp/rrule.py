@@ -4,11 +4,11 @@ This module provides utilities for validating and working with
 iCalendar RRULE (recurrence rule) strings used in recurring events.
 """
 
-from dateutil.rrule import rrulestr, DAILY, WEEKLY, MONTHLY, YEARLY
-from typing import List, Optional, Tuple, Dict, Any
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
+from dateutil.rrule import DAILY, MONTHLY, WEEKLY, YEARLY, rrulestr
 
 logger = logging.getLogger(__name__)
 

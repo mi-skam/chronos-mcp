@@ -5,23 +5,20 @@ Journal operations for Chronos MCP
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
-from icalendar import Journal as iJournal, Calendar as iCalendar
-from caldav import Event as CalDAVEvent
+
 import caldav
+from caldav import Event as CalDAVEvent
+from icalendar import Calendar as iCalendar
+from icalendar import Journal as iJournal
 
-from .models import Journal
 from .calendars import CalendarManager
-from .utils import ical_to_datetime
+from .exceptions import (CalendarNotFoundError, ChronosError,
+                         EventCreationError, EventDeletionError,
+                         EventNotFoundError)
 from .logging_config import setup_logging
-from .exceptions import (
-    CalendarNotFoundError,
-    EventNotFoundError,
-    EventCreationError,
-    EventDeletionError,
-    ChronosError,
-)
+from .models import Journal
+from .utils import ical_to_datetime
 
-# Set up logging
 logger = setup_logging()
 
 
@@ -64,7 +61,6 @@ class JournalManager:
             if dtstart is None:
                 dtstart = datetime.now(timezone.utc)
 
-            # Create iCalendar journal
             cal = iCalendar()
             journal = iJournal()
 
@@ -81,12 +77,10 @@ class JournalManager:
             if description:
                 journal.add("description", description)
 
-            # Add RELATED-TO properties
             if related_to:
                 for related_uid in related_to:
                     journal.add("related-to", related_uid)
 
-            # Add journal to calendar
             cal.add_component(journal)
 
             # Save to CalDAV server using component-specific method when available
@@ -112,7 +106,6 @@ class JournalManager:
                 )
                 caldav_journal = calendar.save_event(ical_data)
 
-            # Return Journal model
             journal_model = Journal(
                 uid=journal_uid,
                 summary=summary,
@@ -531,9 +524,11 @@ class JournalManager:
                     journal = Journal(
                         uid=str(component.get("uid", "")),
                         summary=str(component.get("summary", "No Title")),
-                        description=str(component.get("description", ""))
-                        if component.get("description")
-                        else None,
+                        description=(
+                            str(component.get("description", ""))
+                            if component.get("description")
+                            else None
+                        ),
                         dtstart=dtstart_dt or datetime.now(timezone.utc),
                         categories=categories,
                         related_to=related_to,

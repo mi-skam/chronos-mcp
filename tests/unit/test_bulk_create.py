@@ -2,14 +2,15 @@
 Unit tests for bulk event creation functionality
 """
 
-import pytest
 import json
 from datetime import datetime
 from unittest.mock import Mock, patch
 
+import pytest
+
+from chronos_mcp.exceptions import ChronosError
 # Import the actual function directly
 from chronos_mcp.server import bulk_create_events
-from chronos_mcp.exceptions import ChronosError
 
 
 class TestBulkCreateEvents:

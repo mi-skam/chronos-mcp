@@ -1,12 +1,13 @@
 """Integration tests for recurring event functionality."""
 
-import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
+import pytest
+
+from chronos_mcp.models import Event
 # Import the actual function directly
 from chronos_mcp.server import create_recurring_event
-from chronos_mcp.models import Event
 
 
 class TestRecurringEventIntegration:

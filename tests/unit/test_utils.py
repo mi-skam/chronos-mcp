@@ -2,16 +2,13 @@
 Unit tests for utility functions
 """
 
+from datetime import date, datetime, timezone
+
 import pytest
-from datetime import datetime, timezone, date
 import pytz
 
-from chronos_mcp.utils import (
-    parse_datetime,
-    datetime_to_ical,
-    ical_to_datetime,
-    create_ical_event,
-)
+from chronos_mcp.utils import (create_ical_event, datetime_to_ical,
+                               ical_to_datetime, parse_datetime)
 
 
 class TestParseDatetime:

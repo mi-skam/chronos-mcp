@@ -4,45 +4,34 @@ Chronos MCP Server - Advanced CalDAV Management
 
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any, Union
+from typing import Any, Dict, List, Optional, Union
 
 from fastmcp import FastMCP
 from pydantic import Field
 
-from .logging_config import setup_logging
-from .config import ConfigManager
 from .accounts import AccountManager
+from .bulk import BulkOperationManager, BulkOperationMode, BulkOptions
 from .calendars import CalendarManager
+from .config import ConfigManager
 from .events import EventManager
-from .tasks import TaskManager
+from .exceptions import (AccountAlreadyExistsError, AccountNotFoundError,
+                         AttendeeValidationError, CalendarNotFoundError,
+                         ChronosError, DateTimeValidationError, ErrorSanitizer,
+                         EventCreationError, EventNotFoundError,
+                         ValidationError)
 from .journals import JournalManager
+from .logging_config import setup_logging
 from .models import Account
 from .rrule import RRuleValidator
+from .tasks import TaskManager
 from .validation import InputValidator
-from .bulk import BulkOperationManager, BulkOptions, BulkOperationMode
-from .exceptions import (
-    ChronosError,
-    ErrorSanitizer,
-    AccountAlreadyExistsError,
-    AccountNotFoundError,
-    CalendarNotFoundError,
-    EventNotFoundError,
-    EventCreationError,
-    DateTimeValidationError,
-    AttendeeValidationError,
-    ValidationError,
-)
 
-# Set up logging
 logger = setup_logging()
 
-# Initialize FastMCP server
 mcp = FastMCP("chronos-mcp")
 
-# Log startup
 logger.info("Initializing Chronos MCP Server...")
 
-# Initialize managers
 try:
     config_manager = ConfigManager()
     account_manager = AccountManager(config_manager)
@@ -59,9 +48,6 @@ try:
 except Exception as e:
     logger.error(f"Error initializing managers: {e}")
     raise
-
-
-# ============= Account Management Tools =============
 
 
 @mcp.tool
@@ -87,7 +73,6 @@ async def add_account(
         )
         config_manager.add_account(account)
 
-        # Test connection
         test_result = account_manager.test_account(alias, request_id=request_id)
 
         return {
@@ -223,9 +208,6 @@ async def test_account(
     return account_manager.test_account(alias)
 
 
-# ============= Calendar Management Tools =============
-
-
 @mcp.tool
 async def list_calendars(
     account: Optional[str] = Field(
@@ -340,9 +322,6 @@ async def delete_calendar(
         }
 
 
-# ============= Event Management Tools =============
-
-
 @mcp.tool
 async def create_event(
     calendar_uid: str = Field(..., description="Calendar UID"),
@@ -369,8 +348,9 @@ async def create_event(
     account: Optional[str] = Field(None, description="Account alias"),
 ) -> Dict[str, Any]:
     """Create a new calendar event"""
-    from .utils import parse_datetime
     import json
+
+    from .utils import parse_datetime
 
     request_id = str(uuid.uuid4())
 
@@ -733,8 +713,9 @@ async def update_event(
     account: Optional[str] = Field(None, description="Account alias"),
 ) -> Dict[str, Any]:
     """Update an existing calendar event. Only provided fields will be updated."""
-    from .utils import parse_datetime
     import json
+
+    from .utils import parse_datetime
 
     request_id = str(uuid.uuid4())
 
@@ -834,28 +815,32 @@ async def update_event(
             "description": updated_event.description,
             "location": updated_event.location,
             "recurrence_rule": updated_event.recurrence_rule,
-            "attendees": [
-                {
-                    "email": att.email,
-                    "name": att.name,
-                    "role": att.role,
-                    "status": att.status,
-                    "rsvp": att.rsvp,
-                }
-                for att in updated_event.attendees
-            ]
-            if updated_event.attendees
-            else [],
-            "alarms": [
-                {
-                    "action": alarm.action,
-                    "trigger": alarm.trigger,
-                    "description": alarm.description,
-                }
-                for alarm in updated_event.alarms
-            ]
-            if updated_event.alarms
-            else [],
+            "attendees": (
+                [
+                    {
+                        "email": att.email,
+                        "name": att.name,
+                        "role": att.role,
+                        "status": att.status,
+                        "rsvp": att.rsvp,
+                    }
+                    for att in updated_event.attendees
+                ]
+                if updated_event.attendees
+                else []
+            ),
+            "alarms": (
+                [
+                    {
+                        "action": alarm.action,
+                        "trigger": alarm.trigger,
+                        "description": alarm.description,
+                    }
+                    for alarm in updated_event.alarms
+                ]
+                if updated_event.alarms
+                else []
+            ),
         }
 
         return {
@@ -920,9 +905,6 @@ async def update_event(
         }
 
 
-# ============= Recurring Event Management Tools =============
-
-
 @mcp.tool
 async def create_recurring_event(
     calendar_uid: str = Field(..., description="Calendar UID"),
@@ -957,8 +939,9 @@ async def create_recurring_event(
     - Weekly meeting: "FREQ=WEEKLY;BYDAY=TU;UNTIL=20250630T000000Z"
     - Monthly report: "FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12"
     """
-    from .utils import parse_datetime
     import json
+
+    from .utils import parse_datetime
 
     request_id = str(uuid.uuid4())
 
@@ -1124,9 +1107,6 @@ async def create_recurring_event(
         }
 
 
-# ============= Search and Advanced Features =============
-
-
 @mcp.tool
 async def search_events(
     query: str = Field(..., description="Search query string"),
@@ -1249,9 +1229,11 @@ async def search_events(
                                     "calendar_uid": cal_uid,
                                     "uid": event.uid,
                                     "summary": event.summary,
-                                    "start": event.start.isoformat()
-                                    if hasattr(event.start, "isoformat")
-                                    else str(event.start),
+                                    "start": (
+                                        event.start.isoformat()
+                                        if hasattr(event.start, "isoformat")
+                                        else str(event.start)
+                                    ),
                                     "matched_field": field,
                                     "preview": str(value)[:100],
                                 }
@@ -1439,9 +1421,11 @@ async def bulk_create_events(
                     {
                         "index": i,
                         "success": True,
-                        "uid": created.uid
-                        if hasattr(created, "uid")
-                        else created.get("uid", "unknown"),
+                        "uid": (
+                            created.uid
+                            if hasattr(created, "uid")
+                            else created.get("uid", "unknown")
+                        ),
                         "summary": event_data["summary"],
                     }
                 )
@@ -1795,9 +1779,6 @@ async def bulk_delete_tasks(
         }
 
 
-# ============= Task Management Tools =============
-
-
 @mcp.tool
 async def create_task(
     calendar_uid: str = Field(..., description="Calendar UID"),
@@ -1817,8 +1798,8 @@ async def create_task(
     account: Optional[str] = Field(None, description="Account alias"),
 ) -> Dict[str, Any]:
     """Create a new task"""
-    from .utils import parse_datetime
     from .models import TaskStatus
+    from .utils import parse_datetime
 
     request_id = str(uuid.uuid4())
 
@@ -2042,8 +2023,8 @@ async def update_task(
     account: Optional[str] = Field(None, description="Account alias"),
 ) -> Dict[str, Any]:
     """Update an existing task. Only provided fields will be updated."""
-    from .utils import parse_datetime
     from .models import TaskStatus
+    from .utils import parse_datetime
 
     request_id = str(uuid.uuid4())
 
@@ -2486,9 +2467,6 @@ async def bulk_delete_journals(
         }
 
 
-# ============= Journal Management Tools =============
-
-
 @mcp.tool
 async def create_journal(
     calendar_uid: str = Field(..., description="Calendar UID"),
@@ -2866,8 +2844,6 @@ async def delete_journal(
             "request_id": request_id,
         }
 
-
-# ============= Main Entry Point =============
 
 if __name__ == "__main__":
     # Run the server

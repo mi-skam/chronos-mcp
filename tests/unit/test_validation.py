@@ -2,10 +2,12 @@
 Unit tests for input validation
 """
 
-import pytest
 from datetime import datetime
-from chronos_mcp.validation import InputValidator
+
+import pytest
+
 from chronos_mcp.exceptions import ValidationError
+from chronos_mcp.validation import InputValidator
 
 
 class TestTextFieldValidation:
@@ -225,9 +227,7 @@ class TestAttendeeValidation:
                 "status": "ACCEPTED",
                 "rsvp": True,
             },
-            {
-                "email": "user2@example.com"  # Minimal attendee
-            },
+            {"email": "user2@example.com"},  # Minimal attendee
         ]
 
         result = InputValidator.validate_attendees(attendees)

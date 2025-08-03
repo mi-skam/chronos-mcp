@@ -4,23 +4,20 @@ Event operations for Chronos MCP
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any
-from icalendar import Event as iEvent, Calendar as iCalendar
-from caldav import Event as CalDAVEvent
+from typing import Any, Dict, List, Optional
+
 import caldav
+from caldav import Event as CalDAVEvent
+from icalendar import Calendar as iCalendar
+from icalendar import Event as iEvent
 
-from .models import Event, Attendee, Alarm
 from .calendars import CalendarManager
-from .utils import ical_to_datetime, validate_rrule
+from .exceptions import (CalendarNotFoundError, EventCreationError,
+                         EventDeletionError, EventNotFoundError)
 from .logging_config import setup_logging
-from .exceptions import (
-    CalendarNotFoundError,
-    EventNotFoundError,
-    EventCreationError,
-    EventDeletionError,
-)
+from .models import Alarm, Attendee, Event
+from .utils import ical_to_datetime, validate_rrule
 
-# Set up logging
 logger = setup_logging()
 
 
@@ -269,22 +266,28 @@ class EventManager:
                     event = Event(
                         uid=str(component.get("uid", "")),
                         summary=str(component.get("summary", "No Title")),
-                        description=str(component.get("description", ""))
-                        if component.get("description")
-                        else None,
+                        description=(
+                            str(component.get("description", ""))
+                            if component.get("description")
+                            else None
+                        ),
                         start=start_dt,
                         end=end_dt,
                         all_day=is_all_day,
-                        location=str(component.get("location", ""))
-                        if component.get("location")
-                        else None,
+                        location=(
+                            str(component.get("location", ""))
+                            if component.get("location")
+                            else None
+                        ),
                         calendar_uid=calendar_uid,
                         account_alias=account_alias
                         or self._get_default_account()
                         or "default",
-                        recurrence_rule=str(component.get("rrule", ""))
-                        if component.get("rrule")
-                        else None,
+                        recurrence_rule=(
+                            str(component.get("rrule", ""))
+                            if component.get("rrule")
+                            else None
+                        ),
                     )
 
                     # Parse attendees

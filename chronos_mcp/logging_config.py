@@ -2,8 +2,8 @@
 Shared logging configuration for Chronos MCP
 """
 
-import sys
 import logging
+import sys
 
 
 def setup_logging():

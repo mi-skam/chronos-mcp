@@ -4,23 +4,18 @@ Account management for Chronos MCP
 
 import uuid
 from typing import Dict, Optional
+
 import caldav
 from caldav import DAVClient, Principal
 
-from .models import AccountStatus
 from .config import ConfigManager
 from .credentials import get_credential_manager
+from .exceptions import (AccountAuthenticationError, AccountConnectionError,
+                         AccountNotFoundError, ChronosError, ErrorHandler,
+                         ErrorSanitizer)
 from .logging_config import setup_logging
-from .exceptions import (
-    AccountNotFoundError,
-    AccountConnectionError,
-    AccountAuthenticationError,
-    ChronosError,
-    ErrorHandler,
-    ErrorSanitizer,
-)
+from .models import AccountStatus
 
-# Set up logging
 logger = setup_logging()
 
 

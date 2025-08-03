@@ -2,12 +2,13 @@
 Unit tests for bulk event deletion functionality
 """
 
-import pytest
 from unittest.mock import patch
 
+import pytest
+
+from chronos_mcp.exceptions import EventNotFoundError
 # Import the actual function directly
 from chronos_mcp.server import bulk_delete_events
-from chronos_mcp.exceptions import EventNotFoundError
 
 
 class TestBulkDeleteEvents:

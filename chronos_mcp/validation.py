@@ -1,9 +1,9 @@
 """Input validation for Chronos MCP."""
 
 import re
-from typing import Dict, List, Any
 import unicodedata
 from datetime import datetime
+from typing import Any, Dict, List
 
 from .exceptions import ValidationError
 from .models import TaskStatus
@@ -255,7 +255,6 @@ class InputValidator:
             for field in ["role", "status", "rsvp"]:
                 if field in attendee:
                     if field == "role":
-                        # Validate role
                         valid_roles = [
                             "CHAIR",
                             "REQ-PARTICIPANT",

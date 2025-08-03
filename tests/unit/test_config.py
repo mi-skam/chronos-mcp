@@ -3,7 +3,8 @@ Unit tests for configuration management
 """
 
 import pytest
-from chronos_mcp.config import ConfigManager, ChronosConfig
+
+from chronos_mcp.config import ChronosConfig, ConfigManager
 from chronos_mcp.models import Account
 
 

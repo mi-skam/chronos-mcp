@@ -2,15 +2,14 @@
 Unit tests for event search functionality
 """
 
-import pytest
 import re
 from datetime import datetime, timedelta
-from chronos_mcp.search import (
-    SearchOptions,
-    search_events as search_events_func,
-    search_events_ranked,
-    calculate_relevance_score,
-)
+
+import pytest
+
+from chronos_mcp.search import SearchOptions, calculate_relevance_score
+from chronos_mcp.search import search_events as search_events_func
+from chronos_mcp.search import search_events_ranked
 
 
 class TestSearchOptions:

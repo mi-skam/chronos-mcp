@@ -2,15 +2,15 @@
 Unit tests for account management
 """
 
-import pytest
 from unittest.mock import Mock, patch
-from chronos_mcp.accounts import AccountManager
-from chronos_mcp.models import AccountStatus
-from chronos_mcp.exceptions import (
-    AccountNotFoundError,
-    AccountAuthenticationError,
-)
+
+import pytest
 from caldav.lib.error import AuthorizationError
+
+from chronos_mcp.accounts import AccountManager
+from chronos_mcp.exceptions import (AccountAuthenticationError,
+                                    AccountNotFoundError)
+from chronos_mcp.models import AccountStatus
 
 
 class TestAccountManager:

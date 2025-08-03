@@ -5,7 +5,7 @@ This module provides secure storage for CalDAV passwords using the system keyrin
 when available, with fallback to configuration file (with warnings).
 """
 
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 # Try to import keyring, but handle its absence gracefully
 try:

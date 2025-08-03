@@ -5,23 +5,20 @@ Task operations for Chronos MCP
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
-from icalendar import Todo as iTodo, Calendar as iCalendar
-from caldav import Event as CalDAVEvent
+
 import caldav
+from caldav import Event as CalDAVEvent
+from icalendar import Calendar as iCalendar
+from icalendar import Todo as iTodo
 
-from .models import Task, TaskStatus
 from .calendars import CalendarManager
-from .utils import ical_to_datetime
+from .exceptions import (CalendarNotFoundError, ChronosError,
+                         EventCreationError, EventDeletionError,
+                         EventNotFoundError)
 from .logging_config import setup_logging
-from .exceptions import (
-    CalendarNotFoundError,
-    EventNotFoundError,
-    EventCreationError,
-    EventDeletionError,
-    ChronosError,
-)
+from .models import Task, TaskStatus
+from .utils import ical_to_datetime
 
-# Set up logging
 logger = setup_logging()
 
 
@@ -62,7 +59,6 @@ class TaskManager:
             )
 
         try:
-            # Create iCalendar task
             cal = iCalendar()
             task = iTodo()
 
@@ -84,12 +80,10 @@ class TaskManager:
             task.add("status", status.value)
             task.add("percent-complete", 0)
 
-            # Add RELATED-TO properties
             if related_to:
                 for related_uid in related_to:
                     task.add("related-to", related_uid)
 
-            # Add task to calendar
             cal.add_component(task)
 
             # Save to CalDAV server using component-specific method when available
@@ -563,9 +557,11 @@ class TaskManager:
                     task = Task(
                         uid=str(component.get("uid", "")),
                         summary=str(component.get("summary", "No Title")),
-                        description=str(component.get("description", ""))
-                        if component.get("description")
-                        else None,
+                        description=(
+                            str(component.get("description", ""))
+                            if component.get("description")
+                            else None
+                        ),
                         due=due_dt,
                         completed=completed_dt,
                         priority=priority,

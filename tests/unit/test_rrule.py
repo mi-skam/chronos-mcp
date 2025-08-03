@@ -1,8 +1,9 @@
 """Unit tests for RRULE validation and parsing."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-from chronos_mcp.rrule import RRuleValidator, RRuleTemplates, MAX_COUNT, MAX_YEARS_AHEAD
+from chronos_mcp.rrule import (MAX_COUNT, MAX_YEARS_AHEAD, RRuleTemplates,
+                               RRuleValidator)
 
 
 class TestRRuleValidator:

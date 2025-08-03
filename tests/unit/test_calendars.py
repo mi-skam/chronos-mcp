@@ -2,11 +2,12 @@
 Unit tests for calendar management
 """
 
-import pytest
 from unittest.mock import Mock
 
-from chronos_mcp.calendars import CalendarManager
+import pytest
+
 from chronos_mcp.accounts import AccountManager
+from chronos_mcp.calendars import CalendarManager
 
 
 class TestCalendarManager:
