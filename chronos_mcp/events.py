@@ -12,8 +12,12 @@ from icalendar import Calendar as iCalendar
 from icalendar import Event as iEvent
 
 from .calendars import CalendarManager
-from .exceptions import (CalendarNotFoundError, EventCreationError,
-                         EventDeletionError, EventNotFoundError)
+from .exceptions import (
+    CalendarNotFoundError,
+    EventCreationError,
+    EventDeletionError,
+    EventNotFoundError,
+)
 from .logging_config import setup_logging
 from .models import Alarm, Attendee, Event
 from .utils import ical_to_datetime, validate_rrule
@@ -28,7 +32,6 @@ class EventManager:
         self.calendars = calendar_manager
 
     def _get_default_account(self) -> Optional[str]:
-        """Get default account alias"""
         try:
             return self.calendars.accounts.config.config.default_account
         except Exception:

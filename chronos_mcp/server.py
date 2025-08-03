@@ -21,7 +21,6 @@ mcp = FastMCP("chronos-mcp")
 logger.info("Initializing Chronos MCP Server...")
 
 try:
-    # Initialize all managers
     config_manager = ConfigManager()
     account_manager = AccountManager(config_manager)
     calendar_manager = CalendarManager(account_manager)
@@ -35,7 +34,6 @@ try:
     )
     logger.info("All managers initialized successfully")
 
-    # Create managers dictionary for tool registration
     managers = {
         "config_manager": config_manager,
         "account_manager": account_manager,
@@ -46,7 +44,6 @@ try:
         "bulk_manager": bulk_manager,
     }
 
-    # Register all tools with the MCP server
     register_all_tools(mcp, managers)
     logger.info("All tools registered successfully")
 
@@ -57,16 +54,30 @@ except Exception as e:
 
 # Export all tools for backwards compatibility
 # This allows tests and existing code to import from server.py
-from .tools.accounts import (add_account, list_accounts, remove_account,
-                             test_account)
-from .tools.bulk import (bulk_create_events, bulk_create_journals,
-                         bulk_create_tasks, bulk_delete_events,
-                         bulk_delete_journals, bulk_delete_tasks)
+from .tools.accounts import add_account, list_accounts, remove_account, test_account
+from .tools.bulk import (
+    bulk_create_events,
+    bulk_create_journals,
+    bulk_create_tasks,
+    bulk_delete_events,
+    bulk_delete_journals,
+    bulk_delete_tasks,
+)
 from .tools.calendars import create_calendar, delete_calendar, list_calendars
-from .tools.events import (create_event, create_recurring_event, delete_event,
-                           get_events_range, search_events, update_event)
-from .tools.journals import (create_journal, delete_journal, list_journals,
-                             update_journal)
+from .tools.events import (
+    create_event,
+    create_recurring_event,
+    delete_event,
+    get_events_range,
+    search_events,
+    update_event,
+)
+from .tools.journals import (
+    create_journal,
+    delete_journal,
+    list_journals,
+    update_journal,
+)
 from .tools.tasks import create_task, delete_task, list_tasks, update_task
 
 __all__ = [

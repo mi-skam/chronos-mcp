@@ -12,9 +12,13 @@ from icalendar import Calendar as iCalendar
 from icalendar import Journal as iJournal
 
 from .calendars import CalendarManager
-from .exceptions import (CalendarNotFoundError, ChronosError,
-                         EventCreationError, EventDeletionError,
-                         JournalNotFoundError)
+from .exceptions import (
+    CalendarNotFoundError,
+    ChronosError,
+    EventCreationError,
+    EventDeletionError,
+    JournalNotFoundError,
+)
 from .logging_config import setup_logging
 from .models import Journal
 from .utils import ical_to_datetime
@@ -29,7 +33,6 @@ class JournalManager:
         self.calendars = calendar_manager
 
     def _get_default_account(self) -> Optional[str]:
-        """Get default account alias"""
         try:
             return self.calendars.accounts.config.config.default_account
         except Exception:

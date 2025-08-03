@@ -12,9 +12,13 @@ from icalendar import Calendar as iCalendar
 from icalendar import Todo as iTodo
 
 from .calendars import CalendarManager
-from .exceptions import (CalendarNotFoundError, ChronosError,
-                         EventCreationError, EventDeletionError,
-                         TaskNotFoundError)
+from .exceptions import (
+    CalendarNotFoundError,
+    ChronosError,
+    EventCreationError,
+    EventDeletionError,
+    TaskNotFoundError,
+)
 from .logging_config import setup_logging
 from .models import Task, TaskStatus
 from .utils import ical_to_datetime
@@ -29,7 +33,6 @@ class TaskManager:
         self.calendars = calendar_manager
 
     def _get_default_account(self) -> Optional[str]:
-        """Get default account alias"""
         try:
             return self.calendars.accounts.config.config.default_account
         except Exception:
