@@ -14,9 +14,14 @@ from caldav import DAVClient, Principal
 
 from .config import ConfigManager
 from .credentials import get_credential_manager
-from .exceptions import (AccountAuthenticationError, AccountConnectionError,
-                         AccountNotFoundError, ChronosError, ErrorHandler,
-                         ErrorSanitizer)
+from .exceptions import (
+    AccountAuthenticationError,
+    AccountConnectionError,
+    AccountNotFoundError,
+    ChronosError,
+    ErrorHandler,
+    ErrorSanitizer,
+)
 from .logging_config import setup_logging
 from .models import AccountStatus
 

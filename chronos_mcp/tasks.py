@@ -12,9 +12,13 @@ from icalendar import Calendar as iCalendar
 from icalendar import Todo as iTodo
 
 from .calendars import CalendarManager
-from .exceptions import (CalendarNotFoundError, ChronosError,
-                         EventCreationError, EventDeletionError,
-                         TaskNotFoundError)
+from .exceptions import (
+    CalendarNotFoundError,
+    ChronosError,
+    EventCreationError,
+    EventDeletionError,
+    TaskNotFoundError,
+)
 from .logging_config import setup_logging
 from .models import Task, TaskStatus
 from .utils import ical_to_datetime

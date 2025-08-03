@@ -8,11 +8,12 @@ from unittest.mock import Mock, patch
 import pytest
 from caldav.lib.error import AuthorizationError
 
-from chronos_mcp.accounts import (AccountManager, CircuitBreaker,
-                                  CircuitBreakerState)
-from chronos_mcp.exceptions import (AccountAuthenticationError,
-                                    AccountConnectionError,
-                                    AccountNotFoundError)
+from chronos_mcp.accounts import AccountManager, CircuitBreaker, CircuitBreakerState
+from chronos_mcp.exceptions import (
+    AccountAuthenticationError,
+    AccountConnectionError,
+    AccountNotFoundError,
+)
 from chronos_mcp.models import AccountStatus
 
 

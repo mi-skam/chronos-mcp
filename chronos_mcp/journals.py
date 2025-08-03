@@ -12,9 +12,13 @@ from icalendar import Calendar as iCalendar
 from icalendar import Journal as iJournal
 
 from .calendars import CalendarManager
-from .exceptions import (CalendarNotFoundError, ChronosError,
-                         EventCreationError, EventDeletionError,
-                         JournalNotFoundError)
+from .exceptions import (
+    CalendarNotFoundError,
+    ChronosError,
+    EventCreationError,
+    EventDeletionError,
+    JournalNotFoundError,
+)
 from .logging_config import setup_logging
 from .models import Journal
 from .utils import ical_to_datetime

@@ -4,8 +4,13 @@ Unit tests for bulk operations
 
 from unittest.mock import Mock
 
-from chronos_mcp.bulk import (BulkOperationManager, BulkOperationMode,
-                              BulkOptions, BulkResult, OperationResult)
+from chronos_mcp.bulk import (
+    BulkOperationManager,
+    BulkOperationMode,
+    BulkOptions,
+    BulkResult,
+    OperationResult,
+)
 
 
 class TestBulkOptions:
