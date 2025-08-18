@@ -171,3 +171,5 @@ accounts.json
 # Debug files
 run_debug.sh
 investigate_*.py
+
+.claude
