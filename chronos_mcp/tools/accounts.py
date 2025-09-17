@@ -26,12 +26,21 @@ async def add_account(
     display_name: Optional[str] = Field(
         None, description="Display name for the account"
     ),
+    allow_local: bool = Field(
+        False,
+        description="Allow localhost/private IPs (WARNING: only for development/testing)"
+    ),
     request_id: str = None,
 ) -> Dict[str, Any]:
-    """Add a new CalDAV account to Chronos"""
+    """Add a new CalDAV account to Chronos
+
+    By default, this function blocks URLs pointing to localhost and private IP
+    addresses for security (SSRF protection). For local development or testing,
+    set allow_local=True to explicitly allow these addresses.
+    """
     # Validate inputs before creating account
-    if not InputValidator.PATTERNS["url"].match(url):
-        raise ValidationError("Invalid URL format. Must be HTTPS URL.")
+    # SSRF protection is enabled by default (allow_private_ips defaults to False)
+    url = InputValidator.validate_url(url, allow_private_ips=allow_local, field_name="url")
 
     alias = InputValidator.validate_text_field(alias, "alias", required=True)
     username = InputValidator.validate_text_field(username, "username", required=True)
