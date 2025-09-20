@@ -5,9 +5,11 @@ This test verifies that the cryptography library functions correctly for
 our use case and helps detect any security vulnerabilities or compatibility
 issues when updating to newer versions.
 """
+
 import pytest
 import sys
 from unittest.mock import patch, MagicMock
+
 
 # Test version information
 def test_cryptography_version_check():
@@ -22,9 +24,9 @@ def test_cryptography_version_check():
         # We should verify it's at least this version to ensure known vulnerabilities are patched
         min_version = version.parse("42.0.4")  # Known vulnerable versions are < 42.0.4
 
-        assert current_version >= min_version, (
-            f"Cryptography version {current_version} is below minimum secure version {min_version}"
-        )
+        assert (
+            current_version >= min_version
+        ), f"Cryptography version {current_version} is below minimum secure version {min_version}"
 
         print(f"Current cryptography version: {current_version}")
 
@@ -82,10 +84,27 @@ def test_cryptography_vulnerable_version_detection():
 
         # Known vulnerable versions
         vulnerable_versions = [
-            "38.0.0", "38.0.1", "38.0.2", "38.0.3", "38.0.4",
-            "39.0.0", "40.0.0", "40.0.1", "40.0.2",
-            "41.0.0", "41.0.1", "41.0.2", "41.0.3", "41.0.4", "41.0.5", "41.0.6", "41.0.7",
-            "42.0.0", "42.0.1", "42.0.2", "42.0.3"  # CVE-2023-23931, CVE-2023-0286
+            "38.0.0",
+            "38.0.1",
+            "38.0.2",
+            "38.0.3",
+            "38.0.4",
+            "39.0.0",
+            "40.0.0",
+            "40.0.1",
+            "40.0.2",
+            "41.0.0",
+            "41.0.1",
+            "41.0.2",
+            "41.0.3",
+            "41.0.4",
+            "41.0.5",
+            "41.0.6",
+            "41.0.7",
+            "42.0.0",
+            "42.0.1",
+            "42.0.2",
+            "42.0.3",  # CVE-2023-23931, CVE-2023-0286
         ]
 
         # This test should PASS with our current version (45.0.5)
@@ -112,9 +131,9 @@ def test_future_cryptography_version_compatibility():
         # Version 46.0.1 is the latest as of this test
         recommended_min = version.parse("45.0.0")
 
-        assert current_version >= recommended_min, (
-            f"Cryptography version {current_version} is older than recommended minimum {recommended_min}"
-        )
+        assert (
+            current_version >= recommended_min
+        ), f"Cryptography version {current_version} is older than recommended minimum {recommended_min}"
 
         # This test will help us detect if a future update breaks compatibility
         # by testing basic cryptographic operations that keyring might use

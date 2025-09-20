@@ -7,9 +7,14 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import Field
 
-from ..exceptions import (CalendarNotFoundError, ChronosError, ErrorSanitizer,
-                          EventCreationError, EventNotFoundError,
-                          ValidationError)
+from ..exceptions import (
+    CalendarNotFoundError,
+    ChronosError,
+    ErrorSanitizer,
+    EventCreationError,
+    EventNotFoundError,
+    ValidationError,
+)
 from ..logging_config import setup_logging
 from ..models import TaskStatus
 from ..utils import parse_datetime
