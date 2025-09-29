@@ -201,9 +201,17 @@ class BulkOperationManager:
                         if options.mode == BulkOperationMode.FAIL_FAST:
                             break
                         elif options.mode == BulkOperationMode.ATOMIC:
-                            self._rollback_created_events(calendar_uid, created_uids)
+                            failed_rollbacks = self._rollback_created_events(
+                                calendar_uid, created_uids
+                            )
                             result.successful = 0
                             result.failed = len(events)
+                            if failed_rollbacks:
+                                result.errors.append(
+                                    f"CRITICAL: Atomic rollback incomplete - {len(failed_rollbacks)} "
+                                    f"events could not be deleted: {', '.join(failed_rollbacks[:5])}"
+                                    + ("..." if len(failed_rollbacks) > 5 else "")
+                                )
                             break
 
                 if (
@@ -279,9 +287,17 @@ class BulkOperationManager:
                         if options.mode == BulkOperationMode.FAIL_FAST:
                             break
                         elif options.mode == BulkOperationMode.ATOMIC:
-                            self._rollback_created_tasks(calendar_uid, created_uids)
+                            failed_rollbacks = self._rollback_created_tasks(
+                                calendar_uid, created_uids
+                            )
                             result.successful = 0
                             result.failed = len(tasks)
+                            if failed_rollbacks:
+                                result.errors.append(
+                                    f"CRITICAL: Atomic rollback incomplete - {len(failed_rollbacks)} "
+                                    f"tasks could not be deleted: {', '.join(failed_rollbacks[:5])}"
+                                    + ("..." if len(failed_rollbacks) > 5 else "")
+                                )
                             break
 
                 if (
@@ -354,9 +370,17 @@ class BulkOperationManager:
                         if options.mode == BulkOperationMode.FAIL_FAST:
                             break
                         elif options.mode == BulkOperationMode.ATOMIC:
-                            self._rollback_created_journals(calendar_uid, created_uids)
+                            failed_rollbacks = self._rollback_created_journals(
+                                calendar_uid, created_uids
+                            )
                             result.successful = 0
                             result.failed = len(journals)
+                            if failed_rollbacks:
+                                result.errors.append(
+                                    f"CRITICAL: Atomic rollback incomplete - {len(failed_rollbacks)} "
+                                    f"journals could not be deleted: {', '.join(failed_rollbacks[:5])}"
+                                    + ("..." if len(failed_rollbacks) > 5 else "")
+                                )
                             break
 
                 if (
@@ -684,38 +708,56 @@ class BulkOperationManager:
 
         return results
 
-    def _rollback_created_events(self, calendar_uid: str, uids: List[str]):
-        """Rollback created events in case of atomic operation failure."""
-        # Delete all created events
+    def _rollback_created_events(self, calendar_uid: str, uids: List[str]) -> List[str]:
+        """Rollback created events in case of atomic operation failure.
+
+        Returns:
+            List of UIDs that failed to rollback (orphaned data)
+        """
+        failed_rollbacks = []
         if self.event_manager:
             for uid in uids:
                 try:
                     self.event_manager.delete_event(calendar_uid, uid)
                     logger.debug(f"Successfully rolled back event {uid}")
                 except Exception as e:
-                    logger.warning(f"Failed to rollback event {uid}: {e}")
+                    logger.error(f"CRITICAL: Failed to rollback event {uid}: {e}")
+                    failed_rollbacks.append(uid)
+        return failed_rollbacks
 
-    def _rollback_created_tasks(self, calendar_uid: str, uids: List[str]):
-        """Rollback created tasks in case of atomic operation failure."""
-        # Delete all created tasks
+    def _rollback_created_tasks(self, calendar_uid: str, uids: List[str]) -> List[str]:
+        """Rollback created tasks in case of atomic operation failure.
+
+        Returns:
+            List of UIDs that failed to rollback (orphaned data)
+        """
+        failed_rollbacks = []
         if self.task_manager:
             for uid in uids:
                 try:
                     self.task_manager.delete_task(calendar_uid, uid)
                     logger.debug(f"Successfully rolled back task {uid}")
                 except Exception as e:
-                    logger.warning(f"Failed to rollback task {uid}: {e}")
+                    logger.error(f"CRITICAL: Failed to rollback task {uid}: {e}")
+                    failed_rollbacks.append(uid)
+        return failed_rollbacks
 
-    def _rollback_created_journals(self, calendar_uid: str, uids: List[str]):
-        """Rollback created journals in case of atomic operation failure."""
-        # Delete all created journals
+    def _rollback_created_journals(self, calendar_uid: str, uids: List[str]) -> List[str]:
+        """Rollback created journals in case of atomic operation failure.
+
+        Returns:
+            List of UIDs that failed to rollback (orphaned data)
+        """
+        failed_rollbacks = []
         if self.journal_manager:
             for uid in uids:
                 try:
                     self.journal_manager.delete_journal(calendar_uid, uid)
                     logger.debug(f"Successfully rolled back journal {uid}")
                 except Exception as e:
-                    logger.warning(f"Failed to rollback journal {uid}: {e}")
+                    logger.error(f"CRITICAL: Failed to rollback journal {uid}: {e}")
+                    failed_rollbacks.append(uid)
+        return failed_rollbacks
 
     def bulk_delete_events(
         self, calendar_uid: str, event_uids: List[str], options: BulkOptions = None
