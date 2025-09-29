@@ -68,10 +68,61 @@ class TestConfigValidation:
         mock_cred_mgr = Mock()
         mock_cred_mgr.keyring_available = False
         mock_cred_manager.return_value = mock_cred_mgr
-        
+
         config_mgr = ConfigManager()
-        
+
         # Default account should be created with valid inputs
         assert "default" in config_mgr.config.accounts
         assert config_mgr.config.accounts["default"].username == "valid_user"
         assert config_mgr.config.accounts["default"].password == "ValidP@ssw0rd!"
+
+
+class TestModelValidation:
+    """Test Pydantic model-level validation (defense-in-depth)"""
+
+    def test_account_model_password_validation(self):
+        """Test that Account model validates password field"""
+        from chronos_mcp.models import Account
+        from pydantic import ValidationError
+
+        # Test with oversized password - should be rejected by validator
+        with pytest.raises(ValidationError) as exc_info:
+            Account(
+                alias="test",
+                url="https://example.com",
+                username="user",
+                password="a" * 11000,  # Exceeds validation limit
+                display_name="Test Account"
+            )
+
+        assert "CALDAV_PASSWORD" in str(exc_info.value) or "password" in str(exc_info.value).lower()
+
+    def test_account_model_valid_password(self):
+        """Test that Account model accepts valid passwords"""
+        from chronos_mcp.models import Account
+
+        # Valid password should pass
+        account = Account(
+            alias="test",
+            url="https://example.com",
+            username="user",
+            password="ValidP@ssw0rd!123",
+            display_name="Test Account"
+        )
+
+        assert account.password == "ValidP@ssw0rd!123"
+
+    def test_account_model_none_password(self):
+        """Test that Account model accepts None password (keyring scenario)"""
+        from chronos_mcp.models import Account
+
+        # None password should pass (for keyring usage)
+        account = Account(
+            alias="test",
+            url="https://example.com",
+            username="user",
+            password=None,
+            display_name="Test Account"
+        )
+
+        assert account.password is None

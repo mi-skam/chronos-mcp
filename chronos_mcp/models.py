@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 class AccountStatus(str, Enum):
@@ -70,6 +70,26 @@ class Account(BaseModel):
         AccountStatus.UNKNOWN, description="Connection status"
     )
     last_sync: Optional[datetime] = Field(None, description="Last successful sync time")
+
+    @field_validator('password')
+    @classmethod
+    def validate_password_field(cls, v: Optional[str]) -> Optional[str]:
+        """Validate password for security (defense-in-depth)"""
+        if v is not None and v != "":
+            from .validation import InputValidator
+            from .exceptions import ValidationError as ChronosValidationError
+            try:
+                # Validate to prevent injection attacks at model layer
+                return InputValidator.validate_text_field(v, "password", required=False)
+            except ChronosValidationError as e:
+                # Re-raise as Pydantic ValidationError for proper handling
+                from pydantic_core import PydanticCustomError
+                raise PydanticCustomError(
+                    'password_validation',
+                    'Password validation failed: {error}',
+                    {'error': str(e)}
+                )
+        return v
 
 
 class Calendar(BaseModel):
