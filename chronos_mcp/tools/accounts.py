@@ -49,6 +49,7 @@ async def add_account(
 
     alias = InputValidator.validate_text_field(alias, "alias", required=True)
     username = InputValidator.validate_text_field(username, "username", required=True)
+    password = InputValidator.validate_text_field(password, "password", required=True)
     display_name = InputValidator.validate_text_field(
         display_name or alias, "display_name"
     )

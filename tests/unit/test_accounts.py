@@ -264,6 +264,66 @@ class TestAccountManager:
                 timeout=30,  # Default timeout
             )
 
+    def test_password_validation_in_add_account(self):
+        """Test that password is validated when adding an account"""
+        from chronos_mcp.validation import InputValidator
+        from chronos_mcp.exceptions import ValidationError
+
+        # Test with control characters in password - should be rejected
+        with pytest.raises(ValidationError) as exc_info:
+            InputValidator.validate_text_field("pass\x00word", "password", required=True)
+        assert "potentially dangerous content" in str(exc_info.value).lower()
+
+        # Test with excessively long password - should be rejected
+        with pytest.raises(ValidationError) as exc_info:
+            InputValidator.validate_text_field("a" * 11000, "password", required=True)
+        assert "maximum" in str(exc_info.value).lower()
+
+        # Test with valid password - should pass
+        result = InputValidator.validate_text_field("ValidP@ssw0rd!", "password", required=True)
+        assert result == "ValidP@ssw0rd!"
+
+    @patch("chronos_mcp.tools.accounts._managers")
+    def test_add_account_validates_password(self, mock_managers_dict, mock_config_manager):
+        """Test that add_account tool validates password input"""
+        import asyncio
+        from chronos_mcp.tools.accounts import add_account
+
+        # Setup managers
+        mock_managers_dict.__getitem__.return_value = mock_config_manager
+        mock_account_manager = Mock()
+        mock_account_manager.test_account.return_value = {
+            "alias": "test",
+            "connected": True,
+            "calendars": 2,
+            "error": None
+        }
+
+        def manager_getter(key):
+            if key == "config_manager":
+                return mock_config_manager
+            elif key == "account_manager":
+                return mock_account_manager
+            raise KeyError(key)
+
+        mock_managers_dict.__getitem__.side_effect = manager_getter
+
+        # Test with invalid password (control character)
+        # The decorator catches exceptions and returns error dict
+        result = asyncio.run(add_account(
+            alias="test",
+            url="https://example.com",
+            username="user",
+            password="pass\x00word",  # Null byte
+            allow_local=True
+        ))
+
+        # Should return error response
+        assert result["success"] is False
+        assert "error_code" in result
+        assert result["error_code"] == "ValidationError"
+        assert "dangerous content" in result["error"].lower()
+
     def test_circuit_breaker_recovery(self, mock_config_manager, sample_account):
         """Test circuit breaker transitions to HALF_OPEN after recovery timeout"""
         mock_config_manager.add_account(sample_account)
