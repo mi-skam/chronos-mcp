@@ -510,8 +510,11 @@ class BulkOperationManager:
                 )
 
         # Use ThreadPoolExecutor with timeout control
+        # CRITICAL: Cap max_workers to prevent resource exhaustion with large batches
+        # 1000+ events should NOT create 1000+ threads
+        max_workers = min(len(batch), options.max_parallel or 10)
         indexed_batch = list(enumerate(batch))
-        with ThreadPoolExecutor(max_workers=len(batch)) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_idx = {
                 executor.submit(create_single_event, idx_event): idx
                 for idx, idx_event in enumerate(indexed_batch)
