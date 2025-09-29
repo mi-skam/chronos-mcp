@@ -9,6 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from .exceptions import ErrorSanitizer
 from .logging_config import setup_logging
 from .models import TaskStatus
 from .utils import parse_datetime
@@ -501,6 +502,10 @@ class BulkOperationManager:
         if not self.event_manager:
             raise ValueError("EventManager not provided to BulkOperationManager")
 
+        # Handle empty batch edge case
+        if not batch:
+            return []
+
         def create_single_event(idx_event_tuple):
             idx, event = idx_event_tuple
             op_start = time.time()
@@ -527,7 +532,6 @@ class BulkOperationManager:
                     duration_ms=(time.time() - op_start) * 1000,
                 )
             except Exception as e:
-                from .exceptions import ErrorSanitizer
                 return OperationResult(
                     index=start_idx + idx,
                     success=False,
@@ -538,6 +542,7 @@ class BulkOperationManager:
         # Use ThreadPoolExecutor with timeout control
         # CRITICAL: Cap max_workers to prevent resource exhaustion with large batches
         # 1000+ events should NOT create 1000+ threads
+        # Default of 10 workers is optimal for I/O-bound CalDAV operations
         max_workers = min(len(batch), options.max_parallel or 10)
         indexed_batch = list(enumerate(batch))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -568,7 +573,6 @@ class BulkOperationManager:
                         )
                     except Exception as e:
                         # Handle executor-level exceptions
-                        from .exceptions import ErrorSanitizer
                         batch_idx = future_to_idx[future]
                         results[batch_idx] = OperationResult(
                             index=start_idx + batch_idx,
@@ -643,7 +647,6 @@ class BulkOperationManager:
                     )
                 )
             except Exception as e:
-                from .exceptions import ErrorSanitizer
                 results.append(
                     OperationResult(
                         index=start_idx + idx,
@@ -697,7 +700,6 @@ class BulkOperationManager:
                     )
                 )
             except Exception as e:
-                from .exceptions import ErrorSanitizer
                 results.append(
                     OperationResult(
                         index=start_idx + idx,
@@ -800,7 +802,6 @@ class BulkOperationManager:
                         )
                         result.successful += 1
                     except Exception as e:
-                        from .exceptions import ErrorSanitizer
 
                         result.results.append(
                             OperationResult(
@@ -862,7 +863,6 @@ class BulkOperationManager:
                         )
                         result.successful += 1
                     except Exception as e:
-                        from .exceptions import ErrorSanitizer
 
                         result.results.append(
                             OperationResult(
@@ -924,7 +924,6 @@ class BulkOperationManager:
                         )
                         result.successful += 1
                     except Exception as e:
-                        from .exceptions import ErrorSanitizer
 
                         result.results.append(
                             OperationResult(
