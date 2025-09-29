@@ -58,6 +58,7 @@ class BulkResult:
     successful: int
     failed: int
     results: List[OperationResult] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
     duration_ms: float = 0.0
 
     @property
@@ -799,12 +800,14 @@ class BulkOperationManager:
                         )
                         result.successful += 1
                     except Exception as e:
+                        from .exceptions import ErrorSanitizer
+
                         result.results.append(
                             OperationResult(
                                 index=batch_start + idx,
                                 success=False,
                                 uid=uid,
-                                error=str(e),
+                                error=ErrorSanitizer.sanitize_message(str(e)),
                                 duration_ms=(time.time() - op_start) * 1000,
                             )
                         )
@@ -859,12 +862,14 @@ class BulkOperationManager:
                         )
                         result.successful += 1
                     except Exception as e:
+                        from .exceptions import ErrorSanitizer
+
                         result.results.append(
                             OperationResult(
                                 index=batch_start + idx,
                                 success=False,
                                 uid=uid,
-                                error=str(e),
+                                error=ErrorSanitizer.sanitize_message(str(e)),
                                 duration_ms=(time.time() - op_start) * 1000,
                             )
                         )
@@ -919,12 +924,14 @@ class BulkOperationManager:
                         )
                         result.successful += 1
                     except Exception as e:
+                        from .exceptions import ErrorSanitizer
+
                         result.results.append(
                             OperationResult(
                                 index=batch_start + idx,
                                 success=False,
                                 uid=uid,
-                                error=str(e),
+                                error=ErrorSanitizer.sanitize_message(str(e)),
                                 duration_ms=(time.time() - op_start) * 1000,
                             )
                         )
