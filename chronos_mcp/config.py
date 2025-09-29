@@ -59,6 +59,26 @@ class ConfigManager:
         env_username = os.getenv("CALDAV_USERNAME")
         env_password = os.getenv("CALDAV_PASSWORD")
 
+        # Validate environment variables before use (defense-in-depth)
+        if env_url and env_username:
+            from .validation import InputValidator
+
+            try:
+                # Allow local URLs for development environments
+                env_url = InputValidator.validate_url(
+                    env_url, allow_private_ips=True, field_name="CALDAV_BASE_URL"
+                )
+                env_username = InputValidator.validate_text_field(
+                    env_username, "CALDAV_USERNAME", required=True
+                )
+                if env_password:
+                    env_password = InputValidator.validate_text_field(
+                        env_password, "CALDAV_PASSWORD", required=True
+                    )
+            except Exception as e:
+                logger.error(f"Invalid environment variable values: {e}")
+                return  # Skip environment account creation if validation fails
+
         if env_url and env_username:
             env_account = Account(
                 alias="default",
