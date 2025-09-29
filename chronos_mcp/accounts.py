@@ -312,28 +312,35 @@ class AccountManager:
 
     @ErrorHandler.safe_operation(logger, default_return=None)
     def get_connection(self, alias: Optional[str] = None) -> Optional[DAVClient]:
-        """Get connection for an account - internal utility method"""
+        """Get connection for an account - internal utility method
+
+        Thread-safe connection management with proper TOCTOU prevention.
+        Staleness check MUST happen inside lock to prevent race conditions.
+        """
         if not alias:
             alias = self.config.config.default_account
 
-        if alias and (
-            alias not in self.connections or self._is_connection_stale(alias)
-        ):
-            # Clean up stale connection if it exists
-            if alias in self.connections and self._is_connection_stale(alias):
-                logger.debug(f"Connection for '{alias}' is stale, reconnecting")
-                self.disconnect_account(alias)
+        if not alias:
+            return None
 
-            # Use thread lock to prevent race conditions in connection creation
-            if alias not in self._connection_locks:
-                self._connection_locks[alias] = threading.Lock()
+        # Ensure lock exists before checking staleness
+        if alias not in self._connection_locks:
+            self._connection_locks[alias] = threading.Lock()
 
-            with self._connection_locks[alias]:
-                # Double-check pattern - connection might have been created by another thread
-                if alias not in self.connections:
-                    self.connect_account(alias)
+        with self._connection_locks[alias]:
+            # Check staleness INSIDE lock to prevent TOCTOU race
+            # Race scenario without this: Thread A checks stale=True outside lock,
+            # Thread B connects, Thread A disconnects fresh connection
+            if alias not in self.connections or self._is_connection_stale(alias):
+                # Clean up stale connection if it exists
+                if alias in self.connections:
+                    logger.debug(f"Connection for '{alias}' is stale, reconnecting")
+                    self.disconnect_account(alias)
 
-        return self.connections.get(alias) if alias else None
+                # Create new connection
+                self.connect_account(alias)
+
+        return self.connections.get(alias)
 
     @ErrorHandler.safe_operation(logger, default_return=None)
     def get_principal(self, alias: Optional[str] = None) -> Optional[Principal]:
