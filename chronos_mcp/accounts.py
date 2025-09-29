@@ -243,15 +243,19 @@ class AccountManager:
         )
 
     def disconnect_account(self, alias: str):
-        """Disconnect from an account and clean up resources"""
+        """Disconnect from an account and clean up resources
+
+        Thread-safety: This method MUST be called while holding self._connection_locks[alias].
+        All callers (get_connection, get_principal) acquire lock before calling this method.
+        """
         if alias in self.connections:
             del self.connections[alias]
         if alias in self.principals:
             del self.principals[alias]
         if alias in self._connection_timestamps:
             del self._connection_timestamps[alias]
-        if alias in self._connection_locks:
-            del self._connection_locks[alias]
+        # Keep lock for reuse - don't delete self._connection_locks[alias]
+        # Reusing locks avoids race where Thread A deletes lock while Thread B tries to acquire it
         # Note: Keep circuit breaker and health data for future connections
 
         account = self.config.get_account(alias)
@@ -344,26 +348,34 @@ class AccountManager:
 
     @ErrorHandler.safe_operation(logger, default_return=None)
     def get_principal(self, alias: Optional[str] = None) -> Optional[Principal]:
-        """Get principal for an account - internal utility method"""
+        """Get principal for an account - internal utility method
+
+        Thread-safe principal access with proper TOCTOU prevention.
+        Staleness check MUST happen inside lock to prevent race conditions.
+        """
         if not alias:
             alias = self.config.config.default_account
 
-        if alias and (alias not in self.principals or self._is_connection_stale(alias)):
-            # Clean up stale connection if it exists
-            if alias in self.principals and self._is_connection_stale(alias):
-                logger.debug(f"Principal for '{alias}' is stale, reconnecting")
-                self.disconnect_account(alias)
+        if not alias:
+            return None
 
-            # Use thread lock to prevent race conditions in connection creation
-            if alias not in self._connection_locks:
-                self._connection_locks[alias] = threading.Lock()
+        # Ensure lock exists before checking staleness
+        if alias not in self._connection_locks:
+            self._connection_locks[alias] = threading.Lock()
 
-            with self._connection_locks[alias]:
-                # Double-check pattern - connection might have been created by another thread
-                if alias not in self.principals:
-                    self.connect_account(alias)
+        with self._connection_locks[alias]:
+            # Check staleness INSIDE lock to prevent TOCTOU race
+            # Same pattern as get_connection() for consistency
+            if alias not in self.principals or self._is_connection_stale(alias):
+                # Clean up stale connection if it exists
+                if alias in self.principals:
+                    logger.debug(f"Principal for '{alias}' is stale, reconnecting")
+                    self.disconnect_account(alias)
 
-        return self.principals.get(alias) if alias else None
+                # Create new connection (also updates principals)
+                self.connect_account(alias)
+
+        return self.principals.get(alias)
 
     def test_account(
         self, alias: str, request_id: Optional[str] = None
