@@ -502,10 +502,11 @@ class BulkOperationManager:
                     duration_ms=(time.time() - op_start) * 1000,
                 )
             except Exception as e:
+                from .exceptions import ErrorSanitizer
                 return OperationResult(
                     index=start_idx + idx,
                     success=False,
-                    error=str(e),
+                    error=ErrorSanitizer.sanitize_message(str(e)),
                     duration_ms=(time.time() - op_start) * 1000,
                 )
 
@@ -542,11 +543,12 @@ class BulkOperationManager:
                         )
                     except Exception as e:
                         # Handle executor-level exceptions
+                        from .exceptions import ErrorSanitizer
                         batch_idx = future_to_idx[future]
                         results[batch_idx] = OperationResult(
                             index=start_idx + batch_idx,
                             success=False,
-                            error=f"Executor error: {e}",
+                            error=ErrorSanitizer.sanitize_message(f"Executor error: {e}"),
                             duration_ms=0,
                         )
             except concurrent.futures.TimeoutError:
@@ -616,11 +618,12 @@ class BulkOperationManager:
                     )
                 )
             except Exception as e:
+                from .exceptions import ErrorSanitizer
                 results.append(
                     OperationResult(
                         index=start_idx + idx,
                         success=False,
-                        error=str(e),
+                        error=ErrorSanitizer.sanitize_message(str(e)),
                         duration_ms=(time.time() - op_start) * 1000,
                     )
                 )
@@ -669,11 +672,12 @@ class BulkOperationManager:
                     )
                 )
             except Exception as e:
+                from .exceptions import ErrorSanitizer
                 results.append(
                     OperationResult(
                         index=start_idx + idx,
                         success=False,
-                        error=str(e),
+                        error=ErrorSanitizer.sanitize_message(str(e)),
                         duration_ms=(time.time() - op_start) * 1000,
                     )
                 )
