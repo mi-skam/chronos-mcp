@@ -34,12 +34,13 @@ def handle_tool_errors(func):
                 "request_id": request_id,
             }
         except Exception as e:
+            sanitized_error = ErrorSanitizer.sanitize_message(str(e))
             logger.error(
-                f"Unexpected error in request {request_id}: {type(e).__name__}: {str(e)}"
+                f"Unexpected error in request {request_id}: {type(e).__name__}: {sanitized_error}"
             )
             return {
                 "success": False,
-                "error": f"Error: {type(e).__name__}: {str(e)}",
+                "error": f"Error: {type(e).__name__}: {sanitized_error}",
                 "error_code": type(e).__name__,
                 "request_id": request_id,
             }
