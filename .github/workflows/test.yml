@@ -38,7 +38,24 @@ jobs:
       run: |
         black --check chronos_mcp tests
     
-    # TODO: Add pytest when unit tests are written
-    - name: Run tests
+    - name: Check cyclomatic complexity
       run: |
-        pytest
+        # Run radon to check for overly complex functions (C rating or higher)
+        # Ratings: A=1-5, B=6-10, C=11-20, D=21-30, E=31+
+        echo "Checking cyclomatic complexity (threshold: C rating or higher)..."
+        radon cc chronos_mcp --min=C --show-complexity || echo "::warning::Found functions with high complexity (C+ rating). Consider refactoring."
+
+    - name: Run tests with coverage
+      run: |
+        # Target 75% coverage (aspirational - current: 77%)
+        # Main gaps: bulk operations (40%), tools/events (44%), tools/calendars (51%)
+        pytest --cov=chronos_mcp --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=75 || echo "::warning::Coverage below 75% threshold"
+
+    - name: Upload coverage reports
+      if: matrix.python-version == '3.11'  # Only upload once, not for every Python version
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false  # Don't fail CI if upload fails

@@ -173,3 +173,9 @@ run_debug.sh
 investigate_*.py
 
 .claude
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+*.cover
