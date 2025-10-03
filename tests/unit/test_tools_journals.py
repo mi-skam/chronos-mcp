@@ -506,13 +506,13 @@ class TestJournalTools:
 
     # REGISTER_JOURNAL_TOOLS TESTS
 
-    def test_register_journal_tools(self, mock_managers):
+    def test_register_journal_tools(self, mock_managers, setup_managers):
         """Test register_journal_tools function"""
         mock_mcp = Mock()
 
         register_journal_tools(mock_mcp, mock_managers)
 
-        # Verify managers were updated
+        # Verify managers were updated - strict equality now works with clean state from fixture
         assert _managers == mock_managers
 
         # Verify all tools were registered

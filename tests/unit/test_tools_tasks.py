@@ -687,13 +687,13 @@ class TestTaskToolsComprehensive:
 
     # REGISTER_TASK_TOOLS TESTS
 
-    def test_register_task_tools(self, mock_managers):
+    def test_register_task_tools(self, mock_managers, setup_managers):
         """Test register_task_tools function"""
         mock_mcp = Mock()
 
         register_task_tools(mock_mcp, mock_managers)
 
-        # Verify managers were updated
+        # Verify managers were updated - strict equality now works with clean state from fixture
         assert _managers == mock_managers
 
         # Verify all tools were registered
@@ -798,6 +798,150 @@ class TestTaskToolsComprehensive:
             )
 
             assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_create_task_empty_summary(self, setup_managers):
+        """Test create_task with empty summary"""
+        with patch(
+            "chronos_mcp.tools.tasks.InputValidator.validate_text_field"
+        ) as mock_validate:
+            mock_validate.side_effect = ValidationError("Summary is required")
+
+            result = await create_task.fn(
+                calendar_uid="cal-123",
+                summary="",
+                description=None,
+                due=None,
+                priority=None,
+                status="NEEDS-ACTION",
+                related_to=None,
+                account=None,
+            )
+
+            assert result["success"] is False
+            assert "Summary is required" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_with_account(self, setup_managers, sample_task):
+        """Test list_tasks with account parameter"""
+        _managers["task_manager"].list_tasks.return_value = [sample_task]
+
+        result = await list_tasks.fn(
+            calendar_uid="cal-123", status_filter=None, account="test_account"
+        )
+
+        _managers["task_manager"].list_tasks.assert_called_once_with(
+            calendar_uid="cal-123", status_filter=None, account_alias="test_account"
+        )
+        assert result["total"] == 1
+        assert len(result["tasks"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_update_task_all_parameters(self, setup_managers, sample_task):
+        """Test update_task with all parameters"""
+        _managers["task_manager"].update_task.return_value = sample_task
+
+        result = await update_task.fn(
+            calendar_uid="cal-123",
+            task_uid="task-123",
+            summary="Updated Summary",
+            description="Updated description",
+            due="2025-12-31T23:59:00Z",
+            priority=3,
+            status="IN-PROCESS",
+            percent_complete=75,
+            account="test_account",
+            request_id=None,
+        )
+
+        assert result["success"] is True
+        assert result["task"]["uid"] == "task-123"
+
+    @pytest.mark.asyncio
+    async def test_update_task_summary_validation_error(self, setup_managers):
+        """Test update_task validation error for summary"""
+        with patch(
+            "chronos_mcp.tools.tasks.InputValidator.validate_text_field"
+        ) as mock_validate:
+            mock_validate.side_effect = ValidationError("Summary invalid")
+
+            result = await update_task.fn(
+                calendar_uid="cal-123",
+                task_uid="task-123",
+                summary="Invalid summary",
+                description=None,
+                due=None,
+                priority=None,
+                status=None,
+                percent_complete=None,
+                account=None,
+                request_id=None,
+            )
+
+            assert result["success"] is False
+            assert "Summary invalid" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_update_task_description_validation_error(self, setup_managers):
+        """Test update_task validation error for description"""
+        with patch(
+            "chronos_mcp.tools.tasks.InputValidator.validate_text_field"
+        ) as mock_validate:
+            mock_validate.side_effect = ValidationError("Description invalid")
+
+            result = await update_task.fn(
+                calendar_uid="cal-123",
+                task_uid="task-123",
+                summary=None,
+                description="Invalid description",
+                due=None,
+                priority=None,
+                status=None,
+                percent_complete=None,
+                account=None,
+                request_id=None,
+            )
+
+            assert result["success"] is False
+            assert "Description invalid" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_update_task_priority_type_error(self, setup_managers):
+        """Test update_task handles TypeError in priority conversion"""
+        result = await update_task.fn(
+            calendar_uid="cal-123",
+            task_uid="task-123",
+            summary=None,
+            description=None,
+            due=None,
+            priority={},  # TypeError when int({})
+            status=None,
+            percent_complete=None,
+            account=None,
+            request_id=None,
+        )
+
+        assert result["success"] is False
+        assert "Invalid priority value" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_update_task_percent_complete_type_error(self, setup_managers):
+        """Test update_task handles TypeError in percent_complete conversion"""
+        result = await update_task.fn(
+            calendar_uid="cal-123",
+            task_uid="task-123",
+            summary=None,
+            description=None,
+            due=None,
+            priority=None,
+            status=None,
+            percent_complete=[],  # TypeError when int([])
+            account=None,
+            request_id=None,
+        )
+
+        assert result["success"] is False
+        assert "Invalid percent_complete value" in result["error"]
 
     @pytest.mark.asyncio
     async def test_managers_not_initialized(self):
