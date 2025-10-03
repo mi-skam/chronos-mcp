@@ -11,6 +11,7 @@ from caldav import Event as CalDAVEvent
 from icalendar import Calendar as iCalendar
 from icalendar import Event as iEvent
 
+from .caldav_utils import get_item_with_fallback
 from .calendars import CalendarManager
 from .exceptions import (
     CalendarNotFoundError,
@@ -332,32 +333,18 @@ class EventManager:
             )
 
         try:
-            # Method 1: Try event_by_uid if available
-            if hasattr(calendar, "event_by_uid"):
-                try:
-                    event = calendar.event_by_uid(event_uid)
-                    event.delete()
-                    logger.info(f"Deleted event '{event_uid}' using event_by_uid")
-                    return True
-                except Exception as e:
-                    logger.warning(f"event_by_uid failed: {e}, trying fallback method")
-
-            # Method 2: Fallback - get all events and filter
-            events = calendar.events()
-            for event in events:
-                # Parse the event to check UID
-                ical = iCalendar.from_ical(event.data)
-                for component in ical.walk():
-                    if component.name == "VEVENT":
-                        if str(component.get("uid", "")) == event_uid:
-                            event.delete()
-                            logger.info(
-                                f"Deleted event '{event_uid}'",
-                                extra={"request_id": request_id},
-                            )
-                            return True
-
-            # Event not found
+            # Use utility function to find event with automatic fallback
+            event = get_item_with_fallback(
+                calendar, event_uid, "event", request_id=request_id
+            )
+            event.delete()
+            logger.info(
+                f"Deleted event '{event_uid}'",
+                extra={"request_id": request_id},
+            )
+            return True
+        except ValueError:
+            # get_item_with_fallback raises ValueError when not found
             raise EventNotFoundError(event_uid, calendar_uid, request_id=request_id)
 
         except EventNotFoundError:
@@ -408,28 +395,12 @@ class EventManager:
             )
 
         try:
-            # Find the existing event
-            caldav_event = None
-
-            # Method 1: Try event_by_uid if available
-            if hasattr(calendar, "event_by_uid"):
-                try:
-                    caldav_event = calendar.event_by_uid(event_uid)
-                except Exception as e:
-                    logger.warning(
-                        f"event_by_uid failed for update: {e}, trying fallback"
-                    )
-
-            # Method 2: Fallback - search through all events
-            if not caldav_event:
-                events = calendar.events()
-                for event in events:
-                    event_data = event.data
-                    if event_uid in event_data:
-                        caldav_event = event
-                        break
-
-            if not caldav_event:
+            # Get existing event using utility function with automatic fallback
+            try:
+                caldav_event = get_item_with_fallback(
+                    calendar, event_uid, "event", request_id=request_id
+                )
+            except ValueError:
                 raise EventNotFoundError(event_uid, calendar_uid, request_id=request_id)
             # Parse existing event data
             ical = iCalendar.from_ical(caldav_event.data)

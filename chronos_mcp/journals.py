@@ -11,6 +11,7 @@ from caldav import Event as CalDAVEvent
 from icalendar import Calendar as iCalendar
 from icalendar import Journal as iJournal
 
+from .caldav_utils import get_item_with_fallback
 from .calendars import CalendarManager
 from .exceptions import (
     CalendarNotFoundError,
@@ -153,37 +154,13 @@ class JournalManager:
             )
 
         try:
-            # Method 1: Try event_by_uid if available
-            if hasattr(calendar, "event_by_uid"):
-                try:
-                    caldav_journal = calendar.event_by_uid(journal_uid)
-                    return self._parse_caldav_journal(
-                        caldav_journal, calendar_uid, account_alias
-                    )
-                except Exception as e:
-                    logger.warning(f"event_by_uid failed: {e}, trying fallback method")
-
-            # Method 2: Fallback - search through all journals
-            try:
-                if hasattr(calendar, "journals"):
-                    journals = calendar.journals()
-                else:
-                    # If journals() not available, use events() and filter
-                    journals = calendar.events()
-
-                for journal in journals:
-                    if journal_uid in journal.data:
-                        journal_data = self._parse_caldav_journal(
-                            journal, calendar_uid, account_alias
-                        )
-                        if journal_data and journal_data.uid == journal_uid:
-                            return journal_data
-            except Exception as e:
-                logger.warning(
-                    f"Fallback search failed: {e}", extra={"request_id": request_id}
-                )
-
-            # Journal not found
+            # Use utility function to find journal with automatic fallback
+            caldav_journal = get_item_with_fallback(
+                calendar, journal_uid, "journal", request_id=request_id
+            )
+            return self._parse_caldav_journal(caldav_journal, calendar_uid, account_alias)
+        except ValueError:
+            # get_item_with_fallback raises ValueError when not found
             raise JournalNotFoundError(journal_uid, calendar_uid, request_id=request_id)
 
         except JournalNotFoundError:
@@ -310,41 +287,13 @@ class JournalManager:
             )
 
         try:
-            # Find the existing journal
-            caldav_journal = None
-
-            # Method 1: Try event_by_uid if available
-            if hasattr(calendar, "event_by_uid"):
-                try:
-                    caldav_journal = calendar.event_by_uid(journal_uid)
-                except Exception as e:
-                    logger.warning(
-                        f"event_by_uid failed for update: {e}, trying fallback"
-                    )
-
-            # Method 2: Fallback - search through all journals
-            if not caldav_journal:
-                try:
-                    if hasattr(calendar, "journals"):
-                        journals = calendar.journals()
-                    else:
-                        # If journals() not available, use events() and filter
-                        journals = calendar.events()
-
-                    for journal in journals:
-                        if journal_uid in journal.data:
-                            caldav_journal = journal
-                            break
-                except Exception as e:
-                    logger.warning(
-                        f"Fallback search in update failed: {e}",
-                        extra={"request_id": request_id},
-                    )
-
-            if not caldav_journal:
-                raise JournalNotFoundError(
-                    journal_uid, calendar_uid, request_id=request_id
+            # Use utility function to find journal with automatic fallback
+            try:
+                caldav_journal = get_item_with_fallback(
+                    calendar, journal_uid, "journal", request_id=request_id
                 )
+            except ValueError:
+                raise JournalNotFoundError(journal_uid, calendar_uid, request_id=request_id)
 
             # Parse existing journal data
             ical = iCalendar.from_ical(caldav_journal.data)
@@ -436,42 +385,18 @@ class JournalManager:
             )
 
         try:
-            # Method 1: Try event_by_uid if available
-            if hasattr(calendar, "event_by_uid"):
-                try:
-                    journal = calendar.event_by_uid(journal_uid)
-                    journal.delete()
-                    logger.info(f"Deleted journal '{journal_uid}' using event_by_uid")
-                    return True
-                except Exception as e:
-                    logger.warning(f"event_by_uid failed: {e}, trying fallback method")
-
-            # Method 2: Fallback - get all journals and filter
-            try:
-                if hasattr(calendar, "journals"):
-                    journals = calendar.journals()
-                else:
-                    # If journals() not available, use events() and filter
-                    journals = calendar.events()
-
-                for journal in journals:
-                    # Parse the journal to check UID and type
-                    ical = iCalendar.from_ical(journal.data)
-                    for component in ical.walk():
-                        if component.name == "VJOURNAL":
-                            if str(component.get("uid", "")) == journal_uid:
-                                journal.delete()
-                                logger.info(
-                                    f"Deleted journal '{journal_uid}'",
-                                    extra={"request_id": request_id},
-                                )
-                                return True
-            except Exception as e:
-                logger.warning(
-                    f"Fallback delete failed: {e}", extra={"request_id": request_id}
-                )
-
-            # Journal not found
+            # Use utility function to find journal with automatic fallback
+            journal = get_item_with_fallback(
+                calendar, journal_uid, "journal", request_id=request_id
+            )
+            journal.delete()
+            logger.info(
+                f"Deleted journal '{journal_uid}'",
+                extra={"request_id": request_id},
+            )
+            return True
+        except ValueError:
+            # get_item_with_fallback raises ValueError when not found
             raise JournalNotFoundError(journal_uid, calendar_uid, request_id=request_id)
 
         except JournalNotFoundError:

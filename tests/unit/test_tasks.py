@@ -478,18 +478,16 @@ class TestTaskManager:
     def test_delete_task_general_error(
         self, mock_calendar_manager, mock_calendar, mock_caldav_task
     ):
-        """Test delete_task handles general errors during deletion and fallback"""
+        """Test delete_task handles general errors during deletion"""
         # Setup
         mgr = TaskManager(mock_calendar_manager)
         mock_calendar_manager.get_calendar.return_value = mock_calendar
         mock_calendar.event_by_uid.return_value = mock_caldav_task
         mock_caldav_task.delete.side_effect = Exception("Unexpected deletion error")
 
-        # Ensure fallback search also fails so it eventually raises TaskNotFoundError
-        mock_calendar.todos.return_value = []
-
-        # Execute & Verify - when both primary and fallback methods fail, it raises TaskNotFoundError
-        with pytest.raises(TaskNotFoundError):
+        # Execute & Verify - when task is found but deletion fails, raises EventDeletionError
+        # (not TaskNotFoundError, since the task was successfully found)
+        with pytest.raises(EventDeletionError):
             mgr.delete_task(calendar_uid="cal-123", task_uid="test-task-123")
 
     # Phase 3: Server Compatibility (70% coverage target)

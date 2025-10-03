@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 from icalendar import Calendar as iCalendar
+from icalendar import Event as iEvent
 from icalendar import Journal as iJournal
 
 from chronos_mcp.calendars import CalendarManager
@@ -251,36 +252,34 @@ class TestJournalCRUD:
         journal_manager.calendars.get_calendar.return_value = mock_calendar
         mock_calendar.event_by_uid.side_effect = Exception("event_by_uid failed")
 
-        # Mock journals method
+        # Create proper iCalendar mock data
         mock_journal1 = Mock()
-        mock_journal1.data = "VJOURNAL data with different uid"
+        cal1 = iCalendar()
+        journal1 = iJournal()
+        journal1.add("uid", "different-uid")
+        journal1.add("summary", "Different Journal")
+        journal1.add("dtstart", datetime.now(timezone.utc))
+        cal1.add_component(journal1)
+        mock_journal1.data = cal1.to_ical()
+
         mock_journal2 = Mock()
-        mock_journal2.data = "VJOURNAL data with test-journal-123"
+        cal2 = iCalendar()
+        journal2 = iJournal()
+        journal2.add("uid", "test-journal-123")
+        journal2.add("summary", "Found Journal")
+        journal2.add("dtstart", datetime.now(timezone.utc))
+        cal2.add_component(journal2)
+        mock_journal2.data = cal2.to_ical()
+
         mock_calendar.journals.return_value = [mock_journal1, mock_journal2]
 
-        with patch.object(journal_manager, "_parse_caldav_journal") as mock_parse:
-            # Return None for first journal, valid journal for second that matches the UID
-            target_journal = Journal(
-                uid="test-journal-123",
-                summary="Found Journal",
-                dtstart=datetime.now(timezone.utc),
-                calendar_uid="cal-123",
-                account_alias="test_account",
-            )
-
-            def parse_side_effect(journal, calendar_uid, account_alias):
-                if hasattr(journal, "data") and "test-journal-123" in journal.data:
-                    return target_journal
-                return None
-
-            mock_parse.side_effect = parse_side_effect
-
-            result = journal_manager.get_journal(
-                journal_uid="test-journal-123", calendar_uid="cal-123"
-            )
+        result = journal_manager.get_journal(
+            journal_uid="test-journal-123", calendar_uid="cal-123"
+        )
 
         assert result is not None
         assert result.uid == "test-journal-123"
+        assert result.summary == "Found Journal"
         mock_calendar.journals.assert_called_once()
 
     def test_get_journal_fallback_to_events_search(self, journal_manager):
@@ -295,32 +294,29 @@ class TestJournalCRUD:
 
         journal_manager.calendars.get_calendar.return_value = mock_calendar
 
-        # Mock events method
+        # Create proper iCalendar mock data
         mock_event1 = Mock()
-        mock_event1.data = "VEVENT data"
+        cal1 = iCalendar()
+        event1 = iEvent()
+        event1.add("uid", "event-uid")
+        event1.add("summary", "Event")
+        cal1.add_component(event1)
+        mock_event1.data = cal1.to_ical()
+
         mock_event2 = Mock()
-        mock_event2.data = "VJOURNAL data with test-journal-123"
+        cal2 = iCalendar()
+        journal2 = iJournal()
+        journal2.add("uid", "test-journal-123")
+        journal2.add("summary", "Found in Events")
+        journal2.add("dtstart", datetime.now(timezone.utc))
+        cal2.add_component(journal2)
+        mock_event2.data = cal2.to_ical()
+
         mock_calendar.events.return_value = [mock_event1, mock_event2]
 
-        with patch.object(journal_manager, "_parse_caldav_journal") as mock_parse:
-            target_journal = Journal(
-                uid="test-journal-123",
-                summary="Found in Events",
-                dtstart=datetime.now(timezone.utc),
-                calendar_uid="cal-123",
-                account_alias="default",
-            )
-
-            def parse_side_effect(journal, calendar_uid, account_alias):
-                if hasattr(journal, "data") and "test-journal-123" in journal.data:
-                    return target_journal
-                return None
-
-            mock_parse.side_effect = parse_side_effect
-
-            result = journal_manager.get_journal(
-                journal_uid="test-journal-123", calendar_uid="cal-123"
-            )
+        result = journal_manager.get_journal(
+            journal_uid="test-journal-123", calendar_uid="cal-123"
+        )
 
         assert result is not None
         assert result.uid == "test-journal-123"
@@ -737,11 +733,9 @@ class TestJournalServerCompatibility:
         mock_journal.delete.side_effect = AuthorizationError("Unauthorized")
         mock_calendar.event_by_uid.return_value = mock_journal
 
-        # Mock the fallback methods to also fail
-        mock_calendar.journals = Mock()
-        mock_calendar.journals.return_value = []  # No journals found in fallback
-
-        with pytest.raises(JournalNotFoundError):
+        # Execute & Verify - when journal is found but deletion fails due to auth, raises EventDeletionError
+        # (not JournalNotFoundError, since the journal was successfully found)
+        with pytest.raises(EventDeletionError):
             journal_manager.delete_journal(
                 calendar_uid="cal-123", journal_uid="test-journal-123"
             )
@@ -755,11 +749,9 @@ class TestJournalServerCompatibility:
         mock_journal.delete.side_effect = Exception("Generic error")
         mock_calendar.event_by_uid.return_value = mock_journal
 
-        # Mock the fallback methods to also fail
-        mock_calendar.journals = Mock()
-        mock_calendar.journals.return_value = []  # No journals found in fallback
-
-        with pytest.raises(JournalNotFoundError):
+        # Execute & Verify - when journal is found but deletion fails, raises EventDeletionError
+        # (not JournalNotFoundError, since the journal was successfully found)
+        with pytest.raises(EventDeletionError):
             journal_manager.delete_journal(
                 calendar_uid="cal-123", journal_uid="test-journal-123"
             )

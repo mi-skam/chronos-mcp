@@ -11,6 +11,7 @@ from caldav import Event as CalDAVEvent
 from icalendar import Calendar as iCalendar
 from icalendar import Todo as iTodo
 
+from .caldav_utils import get_item_with_fallback
 from .calendars import CalendarManager
 from .exceptions import (
     CalendarNotFoundError,
@@ -159,37 +160,13 @@ class TaskManager:
             )
 
         try:
-            # Method 1: Try event_by_uid if available
-            if hasattr(calendar, "event_by_uid"):
-                try:
-                    caldav_task = calendar.event_by_uid(task_uid)
-                    return self._parse_caldav_task(
-                        caldav_task, calendar_uid, account_alias
-                    )
-                except Exception as e:
-                    logger.warning(f"event_by_uid failed: {e}, trying fallback method")
-
-            # Method 2: Fallback - search through all todos
-            try:
-                if hasattr(calendar, "todos"):
-                    todos = calendar.todos()
-                else:
-                    # If todos() not available, use events() and filter
-                    todos = calendar.events()
-
-                for todo in todos:
-                    if task_uid in todo.data:
-                        task_data = self._parse_caldav_task(
-                            todo, calendar_uid, account_alias
-                        )
-                        if task_data and task_data.uid == task_uid:
-                            return task_data
-            except Exception as e:
-                logger.warning(
-                    f"Fallback search failed: {e}", extra={"request_id": request_id}
-                )
-
-            # Task not found
+            # Use utility function to find task with automatic fallback
+            caldav_task = get_item_with_fallback(
+                calendar, task_uid, "task", request_id=request_id
+            )
+            return self._parse_caldav_task(caldav_task, calendar_uid, account_alias)
+        except ValueError:
+            # get_item_with_fallback raises ValueError when not found
             raise TaskNotFoundError(task_uid, calendar_uid, request_id=request_id)
 
         except TaskNotFoundError:
@@ -321,38 +298,12 @@ class TaskManager:
             )
 
         try:
-            # Find the existing task
-            caldav_task = None
-
-            # Method 1: Try event_by_uid if available
-            if hasattr(calendar, "event_by_uid"):
-                try:
-                    caldav_task = calendar.event_by_uid(task_uid)
-                except Exception as e:
-                    logger.warning(
-                        f"event_by_uid failed for update: {e}, trying fallback"
-                    )
-
-            # Method 2: Fallback - search through all todos
-            if not caldav_task:
-                try:
-                    if hasattr(calendar, "todos"):
-                        todos = calendar.todos()
-                    else:
-                        # If todos() not available, use events() and filter
-                        todos = calendar.events()
-
-                    for todo in todos:
-                        if task_uid in todo.data:
-                            caldav_task = todo
-                            break
-                except Exception as e:
-                    logger.warning(
-                        f"Fallback search in update failed: {e}",
-                        extra={"request_id": request_id},
-                    )
-
-            if not caldav_task:
+            # Use utility function to find task with automatic fallback
+            try:
+                caldav_task = get_item_with_fallback(
+                    calendar, task_uid, "task", request_id=request_id
+                )
+            except ValueError:
                 raise TaskNotFoundError(task_uid, calendar_uid, request_id=request_id)
 
             # Parse existing task data
@@ -455,42 +406,18 @@ class TaskManager:
             )
 
         try:
-            # Method 1: Try event_by_uid if available
-            if hasattr(calendar, "event_by_uid"):
-                try:
-                    task = calendar.event_by_uid(task_uid)
-                    task.delete()
-                    logger.info(f"Deleted task '{task_uid}' using event_by_uid")
-                    return True
-                except Exception as e:
-                    logger.warning(f"event_by_uid failed: {e}, trying fallback method")
-
-            # Method 2: Fallback - get all todos and filter
-            try:
-                if hasattr(calendar, "todos"):
-                    todos = calendar.todos()
-                else:
-                    # If todos() not available, use events() and filter
-                    todos = calendar.events()
-
-                for todo in todos:
-                    # Parse the todo to check UID and type
-                    ical = iCalendar.from_ical(todo.data)
-                    for component in ical.walk():
-                        if component.name == "VTODO":
-                            if str(component.get("uid", "")) == task_uid:
-                                todo.delete()
-                                logger.info(
-                                    f"Deleted task '{task_uid}'",
-                                    extra={"request_id": request_id},
-                                )
-                                return True
-            except Exception as e:
-                logger.warning(
-                    f"Fallback delete failed: {e}", extra={"request_id": request_id}
-                )
-
-            # Task not found
+            # Use utility function to find task with automatic fallback
+            task = get_item_with_fallback(
+                calendar, task_uid, "task", request_id=request_id
+            )
+            task.delete()
+            logger.info(
+                f"Deleted task '{task_uid}'",
+                extra={"request_id": request_id},
+            )
+            return True
+        except ValueError:
+            # get_item_with_fallback raises ValueError when not found
             raise TaskNotFoundError(task_uid, calendar_uid, request_id=request_id)
 
         except TaskNotFoundError:
