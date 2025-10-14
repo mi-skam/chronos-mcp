@@ -20,23 +20,27 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        version: "latest"
+
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install black isort flake8 mypy
-    
+        uv sync --all-extras --dev
+
+    - name: Run Ruff Linter
+      run: uv run ruff check src/chronos_mcp tests
+
+    - name: Run Ruff Formatter
+      run: uv run ruff format src/chronos_mcp tests --check
+
     - name: Run Black
-      run: black --check chronos_mcp tests
-    
-    - name: Run isort
-      run: isort --check-only chronos_mcp tests
-    
-    - name: Run Flake8
-      run: flake8 chronos_mcp tests --max-line-length=100
-    
+      run: uv run black --check src/chronos_mcp tests
+
     - name: Run MyPy
-      run: mypy chronos_mcp
+      run: uv run mypy src/chronos_mcp
 
   test:
     name: Test Python ${{ matrix.python-version }}
@@ -54,15 +58,19 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        version: "latest"
+
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-    
+        uv sync --all-extras --dev
+
     - name: Run unit tests with coverage
       run: |
-        pytest tests/unit/ --cov=chronos_mcp --cov-report=xml --cov-report=term
+        uv run pytest tests/unit/ --cov=src/chronos_mcp --cov-report=xml --cov-report=term
     
     - name: Upload coverage to Codecov
       if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
@@ -81,7 +89,7 @@ jobs:
     - name: Run Bandit Security Scan
       uses: gaurav-nelson/bandit-action@v1
       with:
-        path: "chronos_mcp"
+        path: "src/chronos_mcp"
     
     - name: Run Safety Check
       run: |
@@ -101,21 +109,25 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        version: "latest"
+
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-        pip install radicale
-    
+        uv sync --all-extras --dev
+        uv pip install radicale
+
     - name: Start Radicale Test Server
       run: |
-        python -m radicale --config tests/fixtures/radicale.conf &
+        uv run python -m radicale --config tests/fixtures/radicale.conf &
         sleep 5  # Wait for server to start
-    
+
     - name: Run integration tests
       run: |
-        pytest tests/integration/ -v
+        uv run pytest tests/integration/ -v
       env:
         CALDAV_TEST_URL: http://localhost:5232
         CALDAV_TEST_USER: testuser
@@ -134,17 +146,21 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        version: "latest"
+
     - name: Install build dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install build twine
-    
+        uv pip install build twine
+
     - name: Build distribution
-      run: python -m build
-    
+      run: uv build
+
     - name: Check distribution
-      run: twine check dist/*
+      run: uv run twine check dist/*
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4

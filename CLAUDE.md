@@ -4,10 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Core Commands
 
+**IMPORTANT**: This project uses:
+- `just` (justfile) for task running - See [justfile](justfile) for all available commands
+- `uv` for Python package management - See [UV_MIGRATION.md](UV_MIGRATION.md) for details
+
 ### Development
 ```bash
+# Check if uv is installed
+just check-uv
+
 # Install for development with all dependencies
-make dev-install
+just dev-install
 
 # Run the MCP server
 ./run_chronos.sh
@@ -15,57 +22,106 @@ make dev-install
 python -m chronos_mcp
 
 # Format code (required before committing)
-make format
+just format
 
 # Run linting checks
-make lint
+just lint
 
 # Run all tests
-make test
+just test
 
 # Run specific test categories
-make test-unit         # Unit tests only
-make test-integration  # Integration tests only
+just test-unit         # Unit tests only
+just test-integration  # Integration tests only
 
 # Run tests with coverage
-make coverage
+just coverage
 
 # Run a single test file
-pytest tests/unit/test_events.py -v
+just test-file tests/unit/test_events.py
 
 # Run a specific test
 pytest tests/unit/test_events.py::test_create_event -v
 
 # Clean build artifacts
-make clean
+just clean
+
+# Quick check before committing
+just quick
+
+# Full CI/CD simulation locally
+just ci
 ```
 
 ### Linting and Formatting
+
+**IMPORTANT**: This project uses:
+- `ruff` for fast linting and formatting
+- `black` for additional formatting
+- `uv` to run all tools
+
 ```bash
-# Format with black and isort
-black chronos_mcp tests
-isort chronos_mcp tests
+# Format with ruff and black
+just format
 
 # Check formatting without modifying
-black --check chronos_mcp tests
-isort --check-only chronos_mcp tests
+just check-format
 
 # Type checking
-mypy chronos_mcp
+just types
+# or
+uv run mypy src/chronos_mcp
+```
+
+### Dependency Management
+
+```bash
+# Update dependencies
+just update-deps
+
+# Sync dependencies from uv.lock
+just sync
+
+# Generate requirements.txt
+just requirements
 ```
 
 ## Architecture Overview
 
-Chronos MCP is a Model Context Protocol server for CalDAV calendar management built with FastMCP 2.0. The codebase follows a layered architecture:
+Chronos MCP is a Model Context Protocol server for CalDAV calendar management built with FastMCP 2.0. The codebase follows a **src/ layout** and layered architecture.
+
+### Project Structure
+
+```
+chronos-mcp/
+├── src/
+│   └── chronos_mcp/     # Main package (src layout)
+│       ├── server.py    # MCP server entry point
+│       ├── accounts.py  # Account management
+│       ├── calendars.py # Calendar operations
+│       ├── events.py    # Event operations
+│       ├── tasks.py     # Task operations
+│       ├── journals.py  # Journal operations
+│       ├── bulk.py      # Bulk operations
+│       ├── search.py    # Search functionality
+│       ├── models.py    # Data models
+│       ├── validation.py # Input validation
+│       └── tools/       # MCP tool definitions
+├── tests/               # Test suite
+│   └── unit/            # Unit tests
+├── justfile             # Task runner (replaces Makefile)
+├── pyproject.toml       # Project configuration
+└── pytest.ini           # Test configuration
+```
 
 ### Key Components
 
-1. **MCP Interface Layer** (`server.py`)
+1. **MCP Interface Layer** (`src/chronos_mcp/server.py`)
    - Defines MCP tools using FastMCP decorators
    - Handles input validation and error sanitization
    - Maps tool calls to business logic managers
 
-2. **Business Logic Layer** 
+2. **Business Logic Layer**
    - `accounts.py`: Multi-account management with connection caching
    - `calendars.py`: Calendar CRUD operations
    - `events.py`: Event lifecycle including recurring events (RRULE)
@@ -94,10 +150,11 @@ Chronos MCP is a Model Context Protocol server for CalDAV calendar management bu
 
 ### Key Files to Understand
 
-- `server.py`: Entry point and tool definitions - start here to understand available operations
-- `models.py`: Data structures used throughout the codebase
-- `exceptions.py`: Error handling patterns and custom exceptions
-- `validation.py`: Security-critical input validation logic
+- `src/chronos_mcp/server.py`: Entry point and tool definitions - start here to understand available operations
+- `src/chronos_mcp/models.py`: Data structures used throughout the codebase
+- `src/chronos_mcp/exceptions.py`: Error handling patterns and custom exceptions
+- `src/chronos_mcp/validation.py`: Security-critical input validation logic
+- `justfile`: Development task runner (replaces Makefile)
 
 ### Testing Approach
 
@@ -116,14 +173,17 @@ Chronos MCP is a Model Context Protocol server for CalDAV calendar management bu
 ### Common Development Tasks
 
 When adding new CalDAV functionality:
-1. Add Pydantic model to `models.py` if needed
-2. Implement business logic in appropriate manager class
-3. Add tool definition in `server.py` with proper validation
-4. Write unit tests following existing patterns
+1. Add Pydantic model to `src/chronos_mcp/models.py` if needed
+2. Implement business logic in appropriate manager class under `src/chronos_mcp/`
+3. Add tool definition in `src/chronos_mcp/server.py` with proper validation
+4. Write unit tests following existing patterns in `tests/unit/`
 5. Update API documentation if adding new tools
+6. Run `just format` before committing
+7. Run `just quick` to verify changes
 
 When fixing bugs:
 1. Check if error handling follows the sanitization pattern
 2. Ensure input validation is applied consistently
 3. Add test case reproducing the bug before fixing
-4. Run full test suite to prevent regressions
+4. Run full test suite to prevent regressions: `just test`
+5. Verify with `just ci` before pushing
