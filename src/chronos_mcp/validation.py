@@ -20,7 +20,7 @@ import re
 import socket
 import unicodedata
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from .exceptions import ValidationError
@@ -47,7 +47,7 @@ class InputValidator:
         "localhost",
         "localhost.localdomain",
         "127.0.0.1",
-        "0.0.0.0",
+        "0.0.0.0",  # nosec B104 - This is a blocklist for SSRF protection, not a bind address
         "::1",
         "::ffff:127.0.0.1",
     ]
@@ -108,9 +108,9 @@ class InputValidator:
     ]
 
     @classmethod
-    def validate_event(cls, event_data: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_event(cls, event_data: dict[str, Any]) -> dict[str, Any]:
         """Validate and sanitize event data."""
-        sanitized = {}
+        sanitized: dict[str, Any] = {}
 
         if not event_data.get("summary"):
             raise ValidationError("Event summary is required")
@@ -277,8 +277,8 @@ class InputValidator:
 
     @classmethod
     def validate_attendees(
-        cls, attendees: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        cls, attendees: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Validate attendee list."""
         if not isinstance(attendees, list):
             raise ValidationError("Attendees must be a list")
@@ -338,9 +338,9 @@ class InputValidator:
         return rrule
 
     @classmethod
-    def validate_task(cls, task_data: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_task(cls, task_data: dict[str, Any]) -> dict[str, Any]:
         """Validate and sanitize task data."""
-        sanitized = {}
+        sanitized: dict[str, Any] = {}
 
         if not task_data.get("summary"):
             raise ValidationError("Task summary is required")
@@ -380,9 +380,9 @@ class InputValidator:
         return sanitized
 
     @classmethod
-    def validate_journal(cls, journal_data: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_journal(cls, journal_data: dict[str, Any]) -> dict[str, Any]:
         """Validate and sanitize journal data."""
-        sanitized = {}
+        sanitized: dict[str, Any] = {}
 
         if not journal_data.get("summary"):
             raise ValidationError("Journal summary is required")
@@ -457,7 +457,7 @@ class InputValidator:
         return percent_val
 
     @classmethod
-    def validate_categories(cls, categories: Any) -> List[str]:
+    def validate_categories(cls, categories: Any) -> list[str]:
         """Validate categories list."""
         if not isinstance(categories, list):
             if isinstance(categories, str):
@@ -478,7 +478,7 @@ class InputValidator:
         return validated_categories
 
     @classmethod
-    def validate_related_to(cls, related_to: Any) -> List[str]:
+    def validate_related_to(cls, related_to: Any) -> list[str]:
         """Validate RELATED-TO UIDs list."""
         if not isinstance(related_to, list):
             if isinstance(related_to, str):
@@ -595,7 +595,7 @@ class InputValidator:
                         # Be conservative and reject
                         pass
 
-            except (socket.gaierror, socket.error) as e:
+            except (OSError, socket.gaierror):
                 # If DNS resolution fails, we should be cautious
                 # Could be a non-existent domain or network issue
                 raise ValidationError(
@@ -606,7 +606,7 @@ class InputValidator:
 
         except ValueError as e:
             # URL parsing failed
-            raise ValidationError(f"Invalid URL format for {field_name}: {str(e)}")
+            raise ValidationError(f"Invalid URL format for {field_name}: {e!s}")
 
         return url
 

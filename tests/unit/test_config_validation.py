@@ -3,26 +3,27 @@ Tests for configuration validation
 """
 
 import os
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
+
 import pytest
 
 from chronos_mcp.config import ConfigManager
-from chronos_mcp.exceptions import ValidationError
 
 
 class TestConfigValidation:
     """Test configuration input validation"""
 
-    @patch('os.getenv')
-    @patch('chronos_mcp.config.get_credential_manager')
+    @patch("os.getenv")
+    @patch("chronos_mcp.config.get_credential_manager")
     def test_environment_password_validation(self, mock_cred_manager, mock_getenv):
         """Test that environment variable passwords are validated"""
+
         # Mock environment variables with control character in password
         def getenv_side_effect(key, default=None):
             env_vars = {
-                'CALDAV_BASE_URL': 'https://example.com',
-                'CALDAV_USERNAME': 'valid_user',
-                'CALDAV_PASSWORD': 'a' * 11000  # Exceeds max length
+                "CALDAV_BASE_URL": "https://example.com",
+                "CALDAV_USERNAME": "valid_user",
+                "CALDAV_PASSWORD": "a" * 11000,  # Exceeds max length
             }
             return env_vars.get(key, default)
 
@@ -35,16 +36,17 @@ class TestConfigValidation:
         # Default account should not be created due to validation failure
         assert "default" not in config_mgr.config.accounts
 
-    @patch('os.getenv')
-    @patch('chronos_mcp.config.get_credential_manager')
+    @patch("os.getenv")
+    @patch("chronos_mcp.config.get_credential_manager")
     def test_environment_username_validation(self, mock_cred_manager, mock_getenv):
         """Test that environment variable usernames are validated"""
+
         # Mock environment variables with XSS in username
         def getenv_side_effect(key, default=None):
             env_vars = {
-                'CALDAV_BASE_URL': 'https://example.com',
-                'CALDAV_USERNAME': '<script>alert("xss")</script>',  # XSS - should be rejected
-                'CALDAV_PASSWORD': 'ValidPassword123'
+                "CALDAV_BASE_URL": "https://example.com",
+                "CALDAV_USERNAME": '<script>alert("xss")</script>',  # XSS - should be rejected
+                "CALDAV_PASSWORD": "ValidPassword123",
             }
             return env_vars.get(key, default)
 
@@ -57,12 +59,15 @@ class TestConfigValidation:
         # Default account should not be created
         assert "default" not in config_mgr.config.accounts
 
-    @patch.dict(os.environ, {
-        'CALDAV_BASE_URL': 'https://example.com',
-        'CALDAV_USERNAME': 'valid_user',
-        'CALDAV_PASSWORD': 'ValidP@ssw0rd!'
-    })
-    @patch('chronos_mcp.config.get_credential_manager')
+    @patch.dict(
+        os.environ,
+        {
+            "CALDAV_BASE_URL": "https://example.com",
+            "CALDAV_USERNAME": "valid_user",
+            "CALDAV_PASSWORD": "ValidP@ssw0rd!",
+        },
+    )
+    @patch("chronos_mcp.config.get_credential_manager")
     def test_environment_valid_credentials(self, mock_cred_manager):
         """Test that valid environment credentials are accepted"""
         mock_cred_mgr = Mock()
@@ -82,8 +87,9 @@ class TestModelValidation:
 
     def test_account_model_password_validation(self):
         """Test that Account model validates password field"""
-        from chronos_mcp.models import Account
         from pydantic import ValidationError
+
+        from chronos_mcp.models import Account
 
         # Test with oversized password - should be rejected by validator
         with pytest.raises(ValidationError) as exc_info:
@@ -92,10 +98,13 @@ class TestModelValidation:
                 url="https://example.com",
                 username="user",
                 password="a" * 11000,  # Exceeds validation limit
-                display_name="Test Account"
+                display_name="Test Account",
             )
 
-        assert "CALDAV_PASSWORD" in str(exc_info.value) or "password" in str(exc_info.value).lower()
+        assert (
+            "CALDAV_PASSWORD" in str(exc_info.value)
+            or "password" in str(exc_info.value).lower()
+        )
 
     def test_account_model_valid_password(self):
         """Test that Account model accepts valid passwords"""
@@ -107,7 +116,7 @@ class TestModelValidation:
             url="https://example.com",
             username="user",
             password="ValidP@ssw0rd!123",
-            display_name="Test Account"
+            display_name="Test Account",
         )
 
         assert account.password == "ValidP@ssw0rd!123"
@@ -122,7 +131,7 @@ class TestModelValidation:
             url="https://example.com",
             username="user",
             password=None,
-            display_name="Test Account"
+            display_name="Test Account",
         )
 
         assert account.password is None

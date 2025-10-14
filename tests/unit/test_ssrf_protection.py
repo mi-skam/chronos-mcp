@@ -6,7 +6,7 @@ requests to localhost, private IP ranges, and other potentially dangerous addres
 """
 
 import socket
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -210,9 +210,9 @@ class TestSSRFProtection:
             validator.validate_url(url)
 
         error_msg = str(exc_info.value)
-        assert (
-            "private or internal IP address" in error_msg
-        ), "Should block domain with mixed public/private IPs"
+        assert "private or internal IP address" in error_msg, (
+            "Should block domain with mixed public/private IPs"
+        )
 
     @patch("socket.getaddrinfo")
     def test_validate_url_handles_dns_resolution_failures(self, mock_getaddrinfo):
@@ -227,9 +227,9 @@ class TestSSRFProtection:
             validator.validate_url(url)
 
         error_msg = str(exc_info.value)
-        assert (
-            "Unable to resolve hostname" in error_msg
-        ), "Should handle DNS resolution failure gracefully"
+        assert "Unable to resolve hostname" in error_msg, (
+            "Should handle DNS resolution failure gracefully"
+        )
 
     def test_validate_url_enforces_https(self):
         """Test that only HTTPS URLs are allowed"""
@@ -303,9 +303,9 @@ class TestSSRFProtection:
         ]
 
         for ip in invalid_ips:
-            assert validator.is_private_ip(
-                ip
-            ), f"Should treat invalid IP {ip} as suspicious"
+            assert validator.is_private_ip(ip), (
+                f"Should treat invalid IP {ip} as suspicious"
+            )
 
     def test_validate_url_field_name_in_errors(self):
         """Test that custom field names appear in error messages"""

@@ -4,7 +4,6 @@ Journal operations for Chronos MCP
 
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
 
 import caldav
 from caldav import Event as CalDAVEvent
@@ -24,6 +23,7 @@ from .logging_config import setup_logging
 from .models import Journal
 from .utils import ical_to_datetime
 
+
 logger = setup_logging()
 
 
@@ -33,7 +33,7 @@ class JournalManager:
     def __init__(self, calendar_manager: CalendarManager):
         self.calendars = calendar_manager
 
-    def _get_default_account(self) -> Optional[str]:
+    def _get_default_account(self) -> str | None:
         try:
             return self.calendars.accounts.config.config.default_account
         except Exception:
@@ -43,12 +43,12 @@ class JournalManager:
         self,
         calendar_uid: str,
         summary: str,
-        description: Optional[str] = None,
-        dtstart: Optional[datetime] = None,
-        related_to: Optional[List[str]] = None,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> Optional[Journal]:
+        description: str | None = None,
+        dtstart: datetime | None = None,
+        related_to: list[str] | None = None,
+        account_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> Journal | None:
         """Create a new journal entry - raises exceptions on failure"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -94,19 +94,19 @@ class JournalManager:
                     extra={"request_id": request_id},
                 )
                 try:
-                    caldav_journal = calendar.save_journal(ical_data)
+                    calendar.save_journal(ical_data)
                 except Exception as e:
                     logger.warning(
                         f"calendar.save_journal() failed: {e}, falling back to save_event()",
                         extra={"request_id": request_id},
                     )
-                    caldav_journal = calendar.save_event(ical_data)
+                    calendar.save_event(ical_data)
             else:
                 logger.debug(
                     "Server doesn't support calendar.save_journal(), using calendar.save_event()",
                     extra={"request_id": request_id},
                 )
-                caldav_journal = calendar.save_event(ical_data)
+                calendar.save_event(ical_data)
 
             journal_model = Journal(
                 uid=journal_uid,
@@ -133,15 +133,15 @@ class JournalManager:
                 f"Error creating journal '{summary}': {e}",
                 extra={"request_id": request_id},
             )
-            raise EventCreationError(summary, str(e), request_id=request_id)
+            raise EventCreationError(summary, str(e), request_id=request_id) from e
 
     def get_journal(
         self,
         journal_uid: str,
         calendar_uid: str,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> Optional[Journal]:
+        account_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> Journal | None:
         """Get a specific journal by UID"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -158,10 +158,14 @@ class JournalManager:
             caldav_journal = get_item_with_fallback(
                 calendar, journal_uid, "journal", request_id=request_id
             )
-            return self._parse_caldav_journal(caldav_journal, calendar_uid, account_alias)
-        except ValueError:
+            return self._parse_caldav_journal(
+                caldav_journal, calendar_uid, account_alias
+            )
+        except ValueError as e:
             # get_item_with_fallback raises ValueError when not found
-            raise JournalNotFoundError(journal_uid, calendar_uid, request_id=request_id)
+            raise JournalNotFoundError(
+                journal_uid, calendar_uid, request_id=request_id
+            ) from e
 
         except JournalNotFoundError:
             raise
@@ -171,16 +175,16 @@ class JournalManager:
                 extra={"request_id": request_id},
             )
             raise ChronosError(
-                f"Failed to get journal: {str(e)}", request_id=request_id
-            )
+                f"Failed to get journal: {e!s}", request_id=request_id
+            ) from e
 
     def list_journals(
         self,
         calendar_uid: str,
-        limit: Optional[int] = None,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> List[Journal]:
+        limit: int | None = None,
+        account_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> list[Journal]:
         """List all journals in a calendar"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -268,13 +272,13 @@ class JournalManager:
         self,
         journal_uid: str,
         calendar_uid: str,
-        summary: Optional[str] = None,
-        description: Optional[str] = None,
-        dtstart: Optional[datetime] = None,
-        related_to: Optional[List[str]] = None,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> Optional[Journal]:
+        summary: str | None = None,
+        description: str | None = None,
+        dtstart: datetime | None = None,
+        related_to: list[str] | None = None,
+        account_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> Journal | None:
         """Update an existing journal - raises exceptions on failure"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -293,7 +297,9 @@ class JournalManager:
                     calendar, journal_uid, "journal", request_id=request_id
                 )
             except ValueError:
-                raise JournalNotFoundError(journal_uid, calendar_uid, request_id=request_id)
+                raise JournalNotFoundError(
+                    journal_uid, calendar_uid, request_id=request_id
+                )
 
             # Parse existing journal data
             ical = iCalendar.from_ical(caldav_journal.data)
@@ -362,7 +368,7 @@ class JournalManager:
             )
             raise EventCreationError(
                 journal_uid,
-                f"Failed to update journal: {str(e)}",
+                f"Failed to update journal: {e!s}",
                 request_id=request_id,
             )
 
@@ -370,8 +376,8 @@ class JournalManager:
         self,
         calendar_uid: str,
         journal_uid: str,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
+        account_alias: str | None = None,
+        request_id: str | None = None,
     ) -> bool:
         """Delete a journal by UID - raises exceptions on failure"""
         request_id = request_id or str(uuid.uuid4())
@@ -395,9 +401,11 @@ class JournalManager:
                 extra={"request_id": request_id},
             )
             return True
-        except ValueError:
+        except ValueError as e:
             # get_item_with_fallback raises ValueError when not found
-            raise JournalNotFoundError(journal_uid, calendar_uid, request_id=request_id)
+            raise JournalNotFoundError(
+                journal_uid, calendar_uid, request_id=request_id
+            ) from e
 
         except JournalNotFoundError:
             raise
@@ -414,11 +422,11 @@ class JournalManager:
                 f"Error deleting journal '{journal_uid}': {e}",
                 extra={"request_id": request_id},
             )
-            raise EventDeletionError(journal_uid, str(e), request_id=request_id)
+            raise EventDeletionError(journal_uid, str(e), request_id=request_id) from e
 
     def _parse_caldav_journal(
-        self, caldav_event: CalDAVEvent, calendar_uid: str, account_alias: Optional[str]
-    ) -> Optional[Journal]:
+        self, caldav_event: CalDAVEvent, calendar_uid: str, account_alias: str | None
+    ) -> Journal | None:
         """Parse CalDAV VJOURNAL to Journal model"""
         try:
             # Parse iCalendar data

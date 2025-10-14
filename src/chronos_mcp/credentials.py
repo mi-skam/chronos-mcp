@@ -5,7 +5,8 @@ This module provides secure storage for CalDAV passwords using the system keyrin
 when available, with fallback to configuration file (with warnings).
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
+
 
 # Try to import keyring, but handle its absence gracefully
 try:
@@ -17,6 +18,7 @@ except ImportError:
     keyring = None
 
 from .logging_config import setup_logging
+
 
 logger = setup_logging()
 
@@ -62,8 +64,8 @@ class CredentialManager:
         return f"{self.KEY_PREFIX}{alias}"
 
     def get_password(
-        self, alias: str, fallback_password: Optional[str] = None
-    ) -> Optional[str]:
+        self, alias: str, fallback_password: str | None = None
+    ) -> str | None:
         """
         Retrieve password from keyring, with fallback to provided value.
 
@@ -152,14 +154,16 @@ class CredentialManager:
             logger.error(f"Failed to delete password from keyring: {e}")
             return False
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """
         Get credential manager status information.
 
         Returns:
             Dictionary with status information
         """
-        status = {
+        from typing import Any
+
+        status: dict[str, Any] = {
             "keyring_available": self.keyring_available,
             "backend": None,
             "backend_type": None,

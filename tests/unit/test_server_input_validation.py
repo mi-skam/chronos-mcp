@@ -104,16 +104,16 @@ class TestServerInputValidation:
         # Valid hex colors should pass
         valid_colors = ["#FF0000", "#00FF00", "#0000FF", "#123456", "#ABCDEF"]
         for color in valid_colors:
-            assert validator.PATTERNS["color"].match(
-                color
-            ), f"Valid color should match: {color}"
+            assert validator.PATTERNS["color"].match(color), (
+                f"Valid color should match: {color}"
+            )
 
         # Invalid colors should be rejected
         invalid_colors = ["FF0000", "#GG0000", "#12345", "#1234567", "red"]
         for color in invalid_colors:
-            assert not validator.PATTERNS["color"].match(
-                color
-            ), f"Invalid color should be rejected: {color}"
+            assert not validator.PATTERNS["color"].match(color), (
+                f"Invalid color should be rejected: {color}"
+            )
 
         # Note: #ff0000 is actually valid (lowercase hex is allowed)
 
@@ -148,15 +148,11 @@ class TestServerInputValidation:
                 validator.validate_text_field(
                     dangerous_input, "description", required=False
                 )
-            assert "dangerous content" in str(
-                exc_info.value
-            ), f"Should reject: {dangerous_input}"
+            assert "dangerous content" in str(exc_info.value), (
+                f"Should reject: {dangerous_input}"
+            )
 
         # Some patterns might not match exactly - that's OK as long as major threats are caught
-        potentially_dangerous = [
-            "on<event>=handler",  # Might not match our specific patterns
-            "\\u003cscript\\u003ealert(1)\\u003c/script\\u003e",  # Unicode escapes
-        ]
 
         # These should ideally be caught, but if not, it's not a critical failure for this test
 
@@ -196,9 +192,9 @@ class TestServerInputValidation:
         ]
 
         for url in common_caldav_urls:
-            assert validator.PATTERNS["url"].match(
-                url
-            ), f"Common CalDAV URL should be allowed: {url}"
+            assert validator.PATTERNS["url"].match(url), (
+                f"Common CalDAV URL should be allowed: {url}"
+            )
 
     def test_validation_error_sanitization(self):
         """Test that validation errors don't leak sensitive information"""
@@ -209,7 +205,7 @@ class TestServerInputValidation:
             validator.validate_text_field(
                 "password123secret<script>", "alias", required=True
             )
-            assert False, "Should have raised ValidationError"
+            raise AssertionError("Should have raised ValidationError")
         except ValidationError as e:
             error_msg = str(e)
             # Error message should not contain the original sensitive content

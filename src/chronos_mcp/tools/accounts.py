@@ -2,21 +2,20 @@
 Account management tools for Chronos MCP
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import Field
 
 from ..exceptions import (
-    AccountAlreadyExistsError,
     AccountNotFoundError,
-    ValidationError,
 )
 from ..models import Account
 from ..validation import InputValidator
 from .base import create_success_response, handle_tool_errors
 
+
 # Module-level managers dictionary for dependency injection
-_managers = {}
+_managers: dict[str, Any] = {}
 
 
 # Account tool functions - defined as standalone functions for importability
@@ -26,15 +25,13 @@ async def add_account(
     url: str = Field(..., description="CalDAV server URL"),
     username: str = Field(..., description="Username for authentication"),
     password: str = Field(..., description="Password for authentication"),
-    display_name: Optional[str] = Field(
-        None, description="Display name for the account"
-    ),
+    display_name: str | None = Field(None, description="Display name for the account"),
     allow_local: bool = Field(
         False,
         description="Allow localhost/private IPs (WARNING: only for development/testing)",
     ),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Add a new CalDAV account to Chronos
 
     By default, this function blocks URLs pointing to localhost and private IP
@@ -76,7 +73,7 @@ async def add_account(
     )
 
 
-async def list_accounts() -> Dict[str, Any]:
+async def list_accounts() -> dict[str, Any]:
     """List all configured CalDAV accounts"""
     accounts = _managers["config_manager"].list_accounts()
 
@@ -99,8 +96,8 @@ async def list_accounts() -> Dict[str, Any]:
 @handle_tool_errors
 async def remove_account(
     alias: str = Field(..., description="Account alias to remove"),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Remove a CalDAV account from Chronos"""
     if not _managers["config_manager"].get_account(alias):
         raise AccountNotFoundError(alias, request_id=request_id)
@@ -116,7 +113,7 @@ async def remove_account(
 
 async def test_account(
     alias: str = Field(..., description="Account alias to test"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Test connectivity to a CalDAV account"""
     return _managers["account_manager"].test_account(alias)
 
@@ -145,7 +142,7 @@ test_account.fn = test_account
 __all__ = [
     "add_account",
     "list_accounts",
+    "register_account_tools",
     "remove_account",
     "test_account",
-    "register_account_tools",
 ]

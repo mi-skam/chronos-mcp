@@ -179,3 +179,4 @@ htmlcov/
 .coverage
 coverage.xml
 *.cover
+claude_code_config.json

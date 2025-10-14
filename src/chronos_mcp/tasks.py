@@ -4,7 +4,7 @@ Task operations for Chronos MCP
 
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any
 
 import caldav
 from caldav import Event as CalDAVEvent
@@ -24,6 +24,7 @@ from .logging_config import setup_logging
 from .models import Task, TaskStatus
 from .utils import ical_to_datetime
 
+
 logger = setup_logging()
 
 
@@ -33,7 +34,7 @@ class TaskManager:
     def __init__(self, calendar_manager: CalendarManager):
         self.calendars = calendar_manager
 
-    def _get_default_account(self) -> Optional[str]:
+    def _get_default_account(self) -> str | None:
         try:
             return self.calendars.accounts.config.config.default_account
         except Exception:
@@ -43,14 +44,14 @@ class TaskManager:
         self,
         calendar_uid: str,
         summary: str,
-        description: Optional[str] = None,
-        due: Optional[datetime] = None,
-        priority: Optional[int] = None,
+        description: str | None = None,
+        due: datetime | None = None,
+        priority: int | None = None,
         status: TaskStatus = TaskStatus.NEEDS_ACTION,
-        related_to: Optional[List[str]] = None,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> Optional[Task]:
+        related_to: list[str] | None = None,
+        account_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> Task | None:
         """Create a new task - raises exceptions on failure"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -97,19 +98,19 @@ class TaskManager:
                     extra={"request_id": request_id},
                 )
                 try:
-                    caldav_task = calendar.save_todo(ical_data)
+                    calendar.save_todo(ical_data)
                 except Exception as e:
                     logger.warning(
                         f"calendar.save_todo() failed: {e}, falling back to save_event()",
                         extra={"request_id": request_id},
                     )
-                    caldav_task = calendar.save_event(ical_data)
+                    calendar.save_event(ical_data)
             else:
                 logger.debug(
                     "Server doesn't support calendar.save_todo(), using calendar.save_event()",
                     extra={"request_id": request_id},
                 )
-                caldav_task = calendar.save_event(ical_data)
+                calendar.save_event(ical_data)
 
             task_model = Task(
                 uid=task_uid,
@@ -139,15 +140,15 @@ class TaskManager:
                 f"Error creating task '{summary}': {e}",
                 extra={"request_id": request_id},
             )
-            raise EventCreationError(summary, str(e), request_id=request_id)
+            raise EventCreationError(summary, str(e), request_id=request_id) from e
 
     def get_task(
         self,
         task_uid: str,
         calendar_uid: str,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> Optional[Task]:
+        account_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> Task | None:
         """Get a specific task by UID"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -165,9 +166,11 @@ class TaskManager:
                 calendar, task_uid, "task", request_id=request_id
             )
             return self._parse_caldav_task(caldav_task, calendar_uid, account_alias)
-        except ValueError:
+        except ValueError as e:
             # get_item_with_fallback raises ValueError when not found
-            raise TaskNotFoundError(task_uid, calendar_uid, request_id=request_id)
+            raise TaskNotFoundError(
+                task_uid, calendar_uid, request_id=request_id
+            ) from e
 
         except TaskNotFoundError:
             raise
@@ -176,15 +179,17 @@ class TaskManager:
                 f"Error getting task '{task_uid}': {e}",
                 extra={"request_id": request_id},
             )
-            raise ChronosError(f"Failed to get task: {str(e)}", request_id=request_id)
+            raise ChronosError(
+                f"Failed to get task: {e!s}", request_id=request_id
+            ) from e
 
     def list_tasks(
         self,
         calendar_uid: str,
-        status_filter: Optional[TaskStatus] = None,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> List[Task]:
+        status_filter: TaskStatus | None = None,
+        account_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> list[Task]:
         """List all tasks in a calendar"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -272,20 +277,69 @@ class TaskManager:
 
         return tasks
 
+    def _update_task_fields(
+        self,
+        existing_task: Any,
+        summary: str | None,
+        description: str | None,
+        due: datetime | None,
+        priority: int | None,
+        status: TaskStatus | None,
+        percent_complete: int | None,
+    ) -> None:
+        """Update basic task fields"""
+        if summary is not None:
+            existing_task["SUMMARY"] = summary
+
+        if description is not None:
+            if description:
+                existing_task["DESCRIPTION"] = description
+            elif "DESCRIPTION" in existing_task:
+                del existing_task["DESCRIPTION"]
+
+        if due is not None:
+            if "DUE" in existing_task:
+                del existing_task["DUE"]
+            if due:
+                existing_task.add("DUE", due)
+
+        if priority is not None:
+            if priority and 1 <= priority <= 9:
+                existing_task["PRIORITY"] = priority
+            elif "PRIORITY" in existing_task:
+                del existing_task["PRIORITY"]
+
+        if status is not None:
+            existing_task["STATUS"] = status.value
+
+        if percent_complete is not None and 0 <= percent_complete <= 100:
+            existing_task["PERCENT-COMPLETE"] = percent_complete
+
+    def _update_task_related_to(
+        self, existing_task: Any, related_to: list[str]
+    ) -> None:
+        """Update task RELATED-TO properties"""
+        if "RELATED-TO" in existing_task:
+            del existing_task["RELATED-TO"]
+
+        if related_to:
+            for related_uid in related_to:
+                existing_task.add("RELATED-TO", related_uid)
+
     def update_task(
         self,
         task_uid: str,
         calendar_uid: str,
-        summary: Optional[str] = None,
-        description: Optional[str] = None,
-        due: Optional[datetime] = None,
-        priority: Optional[int] = None,
-        status: Optional[TaskStatus] = None,
-        percent_complete: Optional[int] = None,
-        related_to: Optional[List[str]] = None,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> Optional[Task]:
+        summary: str | None = None,
+        description: str | None = None,
+        due: datetime | None = None,
+        priority: int | None = None,
+        status: TaskStatus | None = None,
+        percent_complete: int | None = None,
+        related_to: list[str] | None = None,
+        account_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> Task | None:
         """Update an existing task - raises exceptions on failure"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -303,8 +357,10 @@ class TaskManager:
                 caldav_task = get_item_with_fallback(
                     calendar, task_uid, "task", request_id=request_id
                 )
-            except ValueError:
-                raise TaskNotFoundError(task_uid, calendar_uid, request_id=request_id)
+            except ValueError as e:
+                raise TaskNotFoundError(
+                    task_uid, calendar_uid, request_id=request_id
+                ) from e
 
             # Parse existing task data
             ical = iCalendar.from_ical(caldav_task.data)
@@ -322,45 +378,19 @@ class TaskManager:
                     request_id=request_id,
                 )
 
-            # Update only provided fields
-            if summary is not None:
-                existing_task["SUMMARY"] = summary
+            # Update fields using helper methods
+            self._update_task_fields(
+                existing_task,
+                summary,
+                description,
+                due,
+                priority,
+                status,
+                percent_complete,
+            )
 
-            if description is not None:
-                if description:
-                    existing_task["DESCRIPTION"] = description
-                elif "DESCRIPTION" in existing_task:
-                    del existing_task["DESCRIPTION"]
-
-            if due is not None:
-                if "DUE" in existing_task:
-                    del existing_task["DUE"]
-                if due:
-                    existing_task.add("DUE", due)
-
-            if priority is not None:
-                if priority and 1 <= priority <= 9:
-                    existing_task["PRIORITY"] = priority
-                elif "PRIORITY" in existing_task:
-                    del existing_task["PRIORITY"]
-
-            if status is not None:
-                existing_task["STATUS"] = status.value
-
-            if percent_complete is not None:
-                if 0 <= percent_complete <= 100:
-                    existing_task["PERCENT-COMPLETE"] = percent_complete
-
-            # Handle RELATED-TO property updates
             if related_to is not None:
-                # Remove all existing RELATED-TO properties
-                if "RELATED-TO" in existing_task:
-                    del existing_task["RELATED-TO"]
-
-                # Add new RELATED-TO properties if provided
-                if related_to:
-                    for related_uid in related_to:
-                        existing_task.add("RELATED-TO", related_uid)
+                self._update_task_related_to(existing_task, related_to)
 
             # Update last-modified timestamp
             if "LAST-MODIFIED" in existing_task:
@@ -384,15 +414,15 @@ class TaskManager:
                 extra={"request_id": request_id},
             )
             raise EventCreationError(
-                task_uid, f"Failed to update task: {str(e)}", request_id=request_id
+                task_uid, f"Failed to update task: {e!s}", request_id=request_id
             )
 
     def delete_task(
         self,
         calendar_uid: str,
         task_uid: str,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
+        account_alias: str | None = None,
+        request_id: str | None = None,
     ) -> bool:
         """Delete a task by UID - raises exceptions on failure"""
         request_id = request_id or str(uuid.uuid4())
@@ -416,9 +446,11 @@ class TaskManager:
                 extra={"request_id": request_id},
             )
             return True
-        except ValueError:
+        except ValueError as e:
             # get_item_with_fallback raises ValueError when not found
-            raise TaskNotFoundError(task_uid, calendar_uid, request_id=request_id)
+            raise TaskNotFoundError(
+                task_uid, calendar_uid, request_id=request_id
+            ) from e
 
         except TaskNotFoundError:
             raise
@@ -435,11 +467,11 @@ class TaskManager:
                 f"Error deleting task '{task_uid}': {e}",
                 extra={"request_id": request_id},
             )
-            raise EventDeletionError(task_uid, str(e), request_id=request_id)
+            raise EventDeletionError(task_uid, str(e), request_id=request_id) from e
 
     def _parse_caldav_task(
-        self, caldav_event: CalDAVEvent, calendar_uid: str, account_alias: Optional[str]
-    ) -> Optional[Task]:
+        self, caldav_event: CalDAVEvent, calendar_uid: str, account_alias: str | None
+    ) -> Task | None:
         """Parse CalDAV VTODO to Task model"""
         try:
             # Parse iCalendar data

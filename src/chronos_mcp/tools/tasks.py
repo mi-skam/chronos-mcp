@@ -3,7 +3,7 @@ Task management tools for Chronos MCP
 """
 
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic import Field
 
@@ -12,7 +12,6 @@ from ..exceptions import (
     ChronosError,
     ErrorSanitizer,
     EventCreationError,
-    EventNotFoundError,
     ValidationError,
 )
 from ..logging_config import setup_logging
@@ -21,30 +20,31 @@ from ..utils import parse_datetime
 from ..validation import InputValidator
 from .base import create_success_response, handle_tool_errors
 
+
 logger = setup_logging()
 
 # Module-level managers dictionary for dependency injection
-_managers = {}
+_managers: dict[str, Any] = {}
 
 
 # Task tool functions - defined as standalone functions for importability
 async def create_task(
     calendar_uid: str = Field(..., description="Calendar UID"),
     summary: str = Field(..., description="Task title/summary"),
-    description: Optional[str] = Field(None, description="Task description"),
-    due: Optional[str] = Field(None, description="Task due date (ISO format)"),
-    priority: Optional[Union[int, str]] = Field(
+    description: str | None = Field(None, description="Task description"),
+    due: str | None = Field(None, description="Task due date (ISO format)"),
+    priority: int | str | None = Field(
         None, description="Task priority (1-9, 1 is highest)"
     ),
     status: str = Field(
         "NEEDS-ACTION",
         description="Task status (NEEDS-ACTION, IN-PROCESS, COMPLETED, CANCELLED)",
     ),
-    related_to: Optional[List[str]] = Field(
+    related_to: list[str] | None = Field(
         None, description="List of related component UIDs"
     ),
-    account: Optional[str] = Field(None, description="Account alias"),
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+) -> dict[str, Any]:
     """Create a new task"""
     request_id = str(uuid.uuid4())
 
@@ -154,7 +154,7 @@ async def create_task(
 
     except Exception as e:
         chronos_error = ChronosError(
-            message=f"Failed to create task: {str(e)}",
+            message=f"Failed to create task: {e!s}",
             details={
                 "tool": "create_task",
                 "summary": summary,
@@ -176,12 +176,12 @@ async def create_task(
 
 async def list_tasks(
     calendar_uid: str = Field(..., description="Calendar UID"),
-    status_filter: Optional[str] = Field(
+    status_filter: str | None = Field(
         None,
         description="Filter by status (NEEDS-ACTION, IN-PROCESS, COMPLETED, CANCELLED)",
     ),
-    account: Optional[str] = Field(None, description="Account alias"),
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+) -> dict[str, Any]:
     """List tasks in a calendar"""
     request_id = str(uuid.uuid4())
 
@@ -250,7 +250,7 @@ async def list_tasks(
 
     except Exception as e:
         chronos_error = ChronosError(
-            message=f"Failed to list tasks: {str(e)}",
+            message=f"Failed to list tasks: {e!s}",
             details={
                 "tool": "list_tasks",
                 "calendar_uid": calendar_uid,
@@ -274,19 +274,19 @@ async def list_tasks(
 async def update_task(
     calendar_uid: str = Field(..., description="Calendar UID"),
     task_uid: str = Field(..., description="Task UID to update"),
-    summary: Optional[str] = Field(None, description="Task title/summary"),
-    description: Optional[str] = Field(None, description="Task description"),
-    due: Optional[str] = Field(None, description="Task due date (ISO format)"),
-    priority: Optional[Union[int, str]] = Field(
+    summary: str | None = Field(None, description="Task title/summary"),
+    description: str | None = Field(None, description="Task description"),
+    due: str | None = Field(None, description="Task due date (ISO format)"),
+    priority: int | str | None = Field(
         None, description="Task priority (1-9, 1 is highest)"
     ),
-    status: Optional[str] = Field(None, description="Task status"),
-    percent_complete: Optional[Union[int, str]] = Field(
+    status: str | None = Field(None, description="Task status"),
+    percent_complete: int | str | None = Field(
         None, description="Completion percentage (0-100)"
     ),
-    account: Optional[str] = Field(None, description="Account alias"),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Update an existing task. Only provided fields will be updated."""
     # Handle type conversion for parameters that might come as strings from MCP
     if priority is not None:
@@ -367,9 +367,9 @@ async def update_task(
 async def delete_task(
     calendar_uid: str = Field(..., description="Calendar UID"),
     task_uid: str = Field(..., description="Task UID to delete"),
-    account: Optional[str] = Field(None, description="Account alias"),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Delete a task"""
     _managers["task_manager"].delete_task(
         calendar_uid=calendar_uid,
@@ -407,8 +407,8 @@ delete_task.fn = delete_task
 # Export all tools for backwards compatibility
 __all__ = [
     "create_task",
-    "list_tasks",
-    "update_task",
     "delete_task",
+    "list_tasks",
     "register_task_tools",
+    "update_task",
 ]

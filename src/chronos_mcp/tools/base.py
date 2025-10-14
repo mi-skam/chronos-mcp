@@ -4,10 +4,11 @@ Base utilities for MCP tools
 
 import uuid
 from functools import wraps
-from typing import Any, Dict
+from typing import Any
 
 from ..exceptions import ChronosError, ErrorSanitizer
 from ..logging_config import setup_logging
+
 
 logger = setup_logging()
 
@@ -48,7 +49,7 @@ def handle_tool_errors(func):
     return wrapper
 
 
-def create_success_response(message: str, request_id: str, **kwargs) -> Dict[str, Any]:
+def create_success_response(message: str, request_id: str, **kwargs) -> dict[str, Any]:
     """Create a standardized success response"""
     response = {
         "success": True,

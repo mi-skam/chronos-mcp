@@ -5,7 +5,6 @@ Configuration management for Chronos MCP
 import json
 import os
 from pathlib import Path
-from typing import Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -13,16 +12,17 @@ from .credentials import get_credential_manager
 from .logging_config import setup_logging
 from .models import Account
 
+
 logger = setup_logging()
 
 
 class ChronosConfig(BaseModel):
     """Main configuration"""
 
-    accounts: Dict[str, Account] = Field(
+    accounts: dict[str, Account] = Field(
         default_factory=dict, description="Configured accounts"
     )
-    default_account: Optional[str] = Field(None, description="Default account alias")
+    default_account: str | None = Field(None, description="Default account alias")
 
 
 class ConfigManager:
@@ -39,7 +39,7 @@ class ConfigManager:
         # First, try to load from config file
         if self.config_file.exists():
             try:
-                with open(self.config_file, "r") as f:
+                with open(self.config_file) as f:
                     data = json.load(f)
                     # Convert account dicts to Account objects
                     accounts = {}
@@ -92,11 +92,13 @@ class ConfigManager:
                 # Store password in keyring if available
                 if env_password:
                     credential_manager = get_credential_manager()
-                    if credential_manager.keyring_available:
-                        if credential_manager.set_password("default", env_password):
-                            logger.info("Environment password stored in keyring")
-                            # Don't include password in account object if stored in keyring
-                            env_account.password = None
+                    if (
+                        credential_manager.keyring_available
+                        and credential_manager.set_password("default", env_password)
+                    ):
+                        logger.info("Environment password stored in keyring")
+                        # Don't include password in account object if stored in keyring
+                        env_account.password = None
 
                 self.config.accounts["default"] = env_account
                 if not self.config.default_account:
@@ -174,7 +176,7 @@ class ConfigManager:
                 self.config.default_account = next(iter(self.config.accounts), None)
             self.save_config()
 
-    def get_account(self, alias: Optional[str] = None) -> Optional[Account]:
+    def get_account(self, alias: str | None = None) -> Account | None:
         """Get an account by alias or return default"""
         if alias:
             return self.config.accounts.get(alias)
@@ -182,6 +184,6 @@ class ConfigManager:
             return self.config.accounts.get(self.config.default_account)
         return None
 
-    def list_accounts(self) -> Dict[str, Account]:
+    def list_accounts(self) -> dict[str, Account]:
         """List all configured accounts"""
         return self.config.accounts

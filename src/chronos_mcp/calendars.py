@@ -3,7 +3,6 @@ Calendar operations for Chronos MCP
 """
 
 import uuid
-from typing import List, Optional
 
 import caldav
 from caldav import Calendar as CalDAVCalendar
@@ -19,6 +18,7 @@ from .exceptions import (
 from .logging_config import setup_logging
 from .models import Calendar
 
+
 logger = setup_logging()
 
 
@@ -29,8 +29,8 @@ class CalendarManager:
         self.accounts = account_manager
 
     def list_calendars(
-        self, account_alias: Optional[str] = None, request_id: Optional[str] = None
-    ) -> List[Calendar]:
+        self, account_alias: str | None = None, request_id: str | None = None
+    ) -> list[Calendar]:
         """List all calendars for an account - raises exceptions on failure"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -71,11 +71,11 @@ class CalendarManager:
     def create_calendar(
         self,
         name: str,
-        description: Optional[str] = None,
-        color: Optional[str] = None,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> Optional[Calendar]:
+        description: str | None = None,
+        color: str | None = None,
+        account_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> Calendar | None:
         """Create a new calendar - raises exceptions on failure"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -113,19 +113,19 @@ class CalendarManager:
             )
             raise CalendarCreationError(
                 name, "Authorization failed", request_id=request_id
-            )
+            ) from e
         except Exception as e:
             logger.error(
                 f"Error creating calendar '{name}': {e}",
                 extra={"request_id": request_id},
             )
-            raise CalendarCreationError(name, str(e), request_id=request_id)
+            raise CalendarCreationError(name, str(e), request_id=request_id) from e
 
     def delete_calendar(
         self,
         calendar_uid: str,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
+        account_alias: str | None = None,
+        request_id: str | None = None,
     ) -> bool:
         """Delete a calendar - raises exceptions on failure"""
         request_id = request_id or str(uuid.uuid4())
@@ -169,21 +169,23 @@ class CalendarManager:
             )
             raise CalendarDeletionError(
                 calendar_uid, "Authorization failed", request_id=request_id
-            )
+            ) from e
         except Exception as e:
             logger.error(
                 f"Error deleting calendar '{calendar_uid}': {e}",
                 extra={"request_id": request_id},
             )
-            raise CalendarDeletionError(calendar_uid, str(e), request_id=request_id)
+            raise CalendarDeletionError(
+                calendar_uid, str(e), request_id=request_id
+            ) from e
 
     @ErrorHandler.safe_operation(logger, default_return=None)
     def get_calendar(
         self,
         calendar_uid: str,
-        account_alias: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> Optional[CalDAVCalendar]:
+        account_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> CalDAVCalendar | None:
         """Get CalDAV calendar object by UID - internal utility method"""
         principal = self.accounts.get_principal(account_alias)
         if not principal:

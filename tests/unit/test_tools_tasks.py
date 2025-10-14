@@ -3,27 +3,25 @@ Comprehensive unit tests for chronos_mcp/tools/tasks.py module
 Tests all MCP tool functions for 100% coverage with defensive programming patterns
 """
 
-import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, Mock, patch, AsyncMock
-from typing import Dict, Any
+from unittest.mock import Mock, patch
+
 import pytest
 
-from chronos_mcp.tools.tasks import (
-    create_task,
-    list_tasks,
-    update_task,
-    delete_task,
-    register_task_tools,
-    _managers,
-)
-from chronos_mcp.models import TaskStatus
 from chronos_mcp.exceptions import (
     CalendarNotFoundError,
-    EventNotFoundError,
+    ChronosError,
     EventCreationError,
     ValidationError,
-    ChronosError,
+)
+from chronos_mcp.models import TaskStatus
+from chronos_mcp.tools.tasks import (
+    _managers,
+    create_task,
+    delete_task,
+    list_tasks,
+    register_task_tools,
+    update_task,
 )
 
 

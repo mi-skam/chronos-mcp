@@ -3,7 +3,7 @@ Journal management tools for Chronos MCP
 """
 
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic import Field
 
@@ -11,7 +11,6 @@ from ..exceptions import (
     CalendarNotFoundError,
     ChronosError,
     ErrorSanitizer,
-    EventNotFoundError,
     ValidationError,
 )
 from ..logging_config import setup_logging
@@ -19,25 +18,24 @@ from ..utils import parse_datetime
 from ..validation import InputValidator
 from .base import create_success_response, handle_tool_errors
 
+
 logger = setup_logging()
 
 # Module-level managers dictionary for dependency injection
-_managers = {}
+_managers: dict[str, Any] = {}
 
 
 # Journal tool functions - defined as standalone functions for importability
 async def create_journal(
     calendar_uid: str = Field(..., description="Calendar UID"),
     summary: str = Field(..., description="Journal entry title/summary"),
-    description: Optional[str] = Field(None, description="Journal entry content"),
-    entry_date: Optional[str] = Field(
-        None, description="Journal entry date (ISO format)"
-    ),
-    related_to: Optional[List[str]] = Field(
+    description: str | None = Field(None, description="Journal entry content"),
+    entry_date: str | None = Field(None, description="Journal entry date (ISO format)"),
+    related_to: list[str] | None = Field(
         None, description="List of related component UIDs"
     ),
-    account: Optional[str] = Field(None, description="Account alias"),
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+) -> dict[str, Any]:
     """Create a new journal entry"""
     request_id = str(uuid.uuid4())
 
@@ -100,7 +98,7 @@ async def create_journal(
 
     except Exception as e:
         chronos_error = ChronosError(
-            message=f"Failed to create journal: {str(e)}",
+            message=f"Failed to create journal: {e!s}",
             details={
                 "tool": "create_journal",
                 "summary": summary,
@@ -121,11 +119,11 @@ async def create_journal(
 
 async def list_journals(
     calendar_uid: str = Field(..., description="Calendar UID"),
-    account: Optional[str] = Field(None, description="Account alias"),
-    limit: Optional[Union[int, str]] = Field(
+    account: str | None = Field(None, description="Account alias"),
+    limit: int | str | None = Field(
         50, description="Maximum number of journals to return"
     ),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """List journal entries in a calendar"""
     request_id = str(uuid.uuid4())
 
@@ -191,7 +189,7 @@ async def list_journals(
 
     except Exception as e:
         chronos_error = ChronosError(
-            message=f"Failed to list journals: {str(e)}",
+            message=f"Failed to list journals: {e!s}",
             details={
                 "tool": "list_journals",
                 "calendar_uid": calendar_uid,
@@ -214,14 +212,12 @@ async def list_journals(
 async def update_journal(
     calendar_uid: str = Field(..., description="Calendar UID"),
     journal_uid: str = Field(..., description="Journal UID to update"),
-    summary: Optional[str] = Field(None, description="Journal entry title/summary"),
-    description: Optional[str] = Field(None, description="Journal entry content"),
-    entry_date: Optional[str] = Field(
-        None, description="Journal entry date (ISO format)"
-    ),
-    account: Optional[str] = Field(None, description="Account alias"),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    summary: str | None = Field(None, description="Journal entry title/summary"),
+    description: str | None = Field(None, description="Journal entry content"),
+    entry_date: str | None = Field(None, description="Journal entry date (ISO format)"),
+    account: str | None = Field(None, description="Account alias"),
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Update an existing journal entry. Only provided fields will be updated."""
     # Validate inputs
     if summary is not None:
@@ -263,9 +259,9 @@ async def update_journal(
 async def delete_journal(
     calendar_uid: str = Field(..., description="Calendar UID"),
     journal_uid: str = Field(..., description="Journal UID to delete"),
-    account: Optional[str] = Field(None, description="Account alias"),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Delete a journal entry"""
     _managers["journal_manager"].delete_journal(
         calendar_uid=calendar_uid,
@@ -303,8 +299,8 @@ delete_journal.fn = delete_journal
 # Export all tools for backwards compatibility
 __all__ = [
     "create_journal",
-    "list_journals",
-    "update_journal",
     "delete_journal",
+    "list_journals",
     "register_journal_tools",
+    "update_journal",
 ]

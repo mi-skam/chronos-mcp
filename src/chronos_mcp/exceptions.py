@@ -11,9 +11,11 @@ import logging
 import re
 import traceback
 import uuid
+from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional, TypeVar, Union
+from typing import Any, TypeVar
+
 
 T = TypeVar("T")
 
@@ -34,9 +36,9 @@ class ChronosError(Exception):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        request_id: Optional[str] = None,
+        error_code: str | None = None,
+        details: dict[str, Any] | None = None,
+        request_id: str | None = None,
     ):
         super().__init__(message)
         self.message = message
@@ -46,7 +48,7 @@ class ChronosError(Exception):
         self.timestamp = datetime.now(timezone.utc).isoformat()
         self.traceback = traceback.format_exc()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for logging/API responses"""
         return {
             "error": self.error_code,
@@ -81,7 +83,7 @@ class AccountNotFoundError(ConfigurationError):
 class InvalidConfigError(ConfigurationError):
     """Raised when configuration file is invalid"""
 
-    def __init__(self, reason: str, config_path: Optional[str] = None, **kwargs):
+    def __init__(self, reason: str, config_path: str | None = None, **kwargs):
         details = {"reason": reason}
         if config_path:
             details["config_path"] = config_path
@@ -99,9 +101,7 @@ class AccountError(ChronosError):
 class AccountConnectionError(AccountError):
     """Raised when connection to CalDAV account fails"""
 
-    def __init__(
-        self, alias: str, original_error: Optional[Exception] = None, **kwargs
-    ):
+    def __init__(self, alias: str, original_error: Exception | None = None, **kwargs):
         details = {"alias": alias}
         if original_error:
             details["original_error"] = str(original_error)
@@ -146,7 +146,7 @@ class CalDAVError(ChronosError):
 class CalendarNotFoundError(CalDAVError):
     """Raised when a calendar is not found"""
 
-    def __init__(self, calendar_uid: str, account: Optional[str] = None, **kwargs):
+    def __init__(self, calendar_uid: str, account: str | None = None, **kwargs):
         details = {"calendar_uid": calendar_uid}
         if account:
             details["account"] = account
@@ -159,7 +159,7 @@ class CalendarNotFoundError(CalDAVError):
 class CalendarCreationError(CalDAVError):
     """Raised when calendar creation fails"""
 
-    def __init__(self, name: str, reason: Optional[str] = None, **kwargs):
+    def __init__(self, name: str, reason: str | None = None, **kwargs):
         message = f"Failed to create calendar '{name}'"
         if reason:
             message += f": {reason}"
@@ -172,7 +172,7 @@ class CalendarCreationError(CalDAVError):
 class CalendarDeletionError(CalDAVError):
     """Raised when calendar deletion fails"""
 
-    def __init__(self, calendar_uid: str, reason: Optional[str] = None, **kwargs):
+    def __init__(self, calendar_uid: str, reason: str | None = None, **kwargs):
         message = f"Failed to delete calendar '{calendar_uid}'"
         if reason:
             message += f": {reason}"
@@ -218,7 +218,7 @@ class JournalNotFoundError(CalDAVError):
 class EventCreationError(CalDAVError):
     """Raised when event creation fails"""
 
-    def __init__(self, summary: str, reason: Optional[str] = None, **kwargs):
+    def __init__(self, summary: str, reason: str | None = None, **kwargs):
         message = f"Failed to create event '{summary}'"
         if reason:
             message += f": {reason}"
@@ -231,7 +231,7 @@ class EventCreationError(CalDAVError):
 class EventDeletionError(CalDAVError):
     """Raised when event deletion fails"""
 
-    def __init__(self, event_uid: str, reason: Optional[str] = None, **kwargs):
+    def __init__(self, event_uid: str, reason: str | None = None, **kwargs):
         message = f"Failed to delete event '{event_uid}'"
         if reason:
             message += f": {reason}"
@@ -251,7 +251,7 @@ class ValidationError(ChronosError):
 class DateTimeValidationError(ValidationError):
     """Raised when datetime parsing/validation fails"""
 
-    def __init__(self, value: str, expected_format: Optional[str] = None, **kwargs):
+    def __init__(self, value: str, expected_format: str | None = None, **kwargs):
         message = f"Invalid datetime format: '{value}'"
         if expected_format:
             message += f" (expected: {expected_format})"
@@ -296,7 +296,7 @@ class ErrorHandler:
     def safe_operation(
         logger: logging.Logger,
         default_return: Any = None,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
         raise_on_error: bool = False,
     ):
         """
@@ -320,7 +320,7 @@ class ErrorHandler:
                 # implementation that may raise exceptions
         """
 
-        def decorator(func: Callable[..., T]) -> Callable[..., Union[T, Any]]:
+        def decorator(func: Callable[..., T]) -> Callable[..., T | Any]:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 request_id = kwargs.get("request_id", str(uuid.uuid4()))
@@ -347,7 +347,7 @@ class ErrorHandler:
                 except Exception as e:
                     # Wrap in ChronosError
                     chronos_error = ChronosError(
-                        message=error_message or f"Operation failed: {str(e)}",
+                        message=error_message or f"Operation failed: {e!s}",
                         details={
                             "function": func.__name__,
                             "original_error": str(e),
@@ -371,7 +371,7 @@ class ErrorHandler:
     def error_context(
         logger: logging.Logger,
         operation: str,
-        request_id: Optional[str] = None,
+        request_id: str | None = None,
         raise_on_error: bool = False,
     ):
         """
@@ -404,7 +404,7 @@ class ErrorHandler:
 
         except Exception as e:
             chronos_error = ChronosError(
-                message=f"{operation} failed: {str(e)}",
+                message=f"{operation} failed: {e!s}",
                 details={
                     "operation": operation,
                     "original_error": str(e),
@@ -441,7 +441,7 @@ class ErrorSanitizer:
         return sanitized
 
     @classmethod
-    def sanitize_error(cls, error: ChronosError) -> Dict[str, Any]:
+    def sanitize_error(cls, error: ChronosError) -> dict[str, Any]:
         """Create sanitized error dict for API responses"""
         return {
             "error": error.error_code,

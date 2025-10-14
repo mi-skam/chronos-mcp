@@ -7,9 +7,12 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from chronos_mcp.search import SearchOptions, calculate_relevance_score
+from chronos_mcp.search import (
+    SearchOptions,
+    calculate_relevance_score,
+    search_events_ranked,
+)
 from chronos_mcp.search import search_events as search_events_func
-from chronos_mcp.search import search_events_ranked
 
 
 class TestSearchOptions:

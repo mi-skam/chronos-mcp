@@ -2,10 +2,8 @@
 Comprehensive unit tests for journal management
 """
 
-import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, Mock, patch
-from uuid import uuid4
+from unittest.mock import Mock, patch
 
 import pytest
 from icalendar import Calendar as iCalendar
@@ -159,15 +157,17 @@ class TestJournalCRUD:
         mock_caldav_journal = Mock()
         mock_calendar.save_journal.return_value = mock_caldav_journal
 
-        with patch("uuid.uuid4", return_value="test-uid-123"):
-            with patch("chronos_mcp.journals.datetime") as mock_datetime:
-                mock_now = datetime(2025, 7, 10, 10, 0, tzinfo=timezone.utc)
-                mock_datetime.now.return_value = mock_now
-                mock_datetime.timezone = timezone
+        with (
+            patch("uuid.uuid4", return_value="test-uid-123"),
+            patch("chronos_mcp.journals.datetime") as mock_datetime,
+        ):
+            mock_now = datetime(2025, 7, 10, 10, 0, tzinfo=timezone.utc)
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.timezone = timezone
 
-                result = journal_manager.create_journal(
-                    calendar_uid="cal-123", summary="Simple Journal"
-                )
+            result = journal_manager.create_journal(
+                calendar_uid="cal-123", summary="Simple Journal"
+            )
 
         assert result is not None
         assert result.uid == "test-uid-123"
@@ -917,7 +917,9 @@ class TestJournalEdgeCases:
         mock_caldav_event.data = self._create_simple_journal_ical()
 
         result = journal_manager._parse_caldav_journal(
-            mock_caldav_event, "cal-123", None  # No account_alias provided
+            mock_caldav_event,
+            "cal-123",
+            None,  # No account_alias provided
         )
 
         assert result is not None
@@ -931,7 +933,9 @@ class TestJournalEdgeCases:
         mock_caldav_event.data = self._create_simple_journal_ical()
 
         result = journal_manager._parse_caldav_journal(
-            mock_caldav_event, "cal-123", None  # No account_alias provided
+            mock_caldav_event,
+            "cal-123",
+            None,  # No account_alias provided
         )
 
         assert result is not None

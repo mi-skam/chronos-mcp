@@ -3,23 +3,23 @@ Bulk operation tools for Chronos MCP
 """
 
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import Field
 
 from ..bulk import BulkOperationMode, BulkOptions
 from ..exceptions import ChronosError, ErrorSanitizer, ValidationError
 from ..logging_config import setup_logging
-from ..validation import InputValidator
-from .base import create_success_response, handle_tool_errors
+from .base import handle_tool_errors
+
 
 logger = setup_logging()
 
 # Module-level managers dictionary for dependency injection
-_managers = {}
+_managers: dict[str, Any] = {}
 
 
-def _format_bulk_response(result, request_id: str, **extra_fields) -> Dict[str, Any]:
+def _format_bulk_response(result, request_id: str, **extra_fields) -> dict[str, Any]:
     """Format bulk operation response with consistent success indicators"""
     response = {
         "success": result.failed == 0,  # Only true if ALL succeed
@@ -63,22 +63,22 @@ def _ensure_managers_initialized():
                 }
             )
         except (ImportError, AttributeError) as e:
-            logger.error(f"Failed to initialize managers: {str(e)}")
-            raise RuntimeError(f"Manager initialization failed: {str(e)}")
+            logger.error(f"Failed to initialize managers: {e!s}")
+            raise RuntimeError(f"Manager initialization failed: {e!s}")
 
 
 # Bulk tool functions - defined as standalone functions for importability
 async def bulk_create_events(
     calendar_uid: str = Field(..., description="Calendar UID"),
-    events: List[Dict[str, Any]] = Field(
+    events: list[dict[str, Any]] = Field(
         ..., description="List of event data dictionaries"
     ),
     mode: str = Field("continue", description="Operation mode: continue, fail_fast"),
     validate_before_execute: bool = Field(
         True, description="Validate events before creation"
     ),
-    account: Optional[str] = Field(None, description="Account alias"),
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+) -> dict[str, Any]:
     """Create multiple events in bulk"""
     request_id = str(uuid.uuid4())
 
@@ -149,10 +149,10 @@ async def bulk_create_events(
             if "alarm_minutes" in parsed_event and isinstance(
                 parsed_event["alarm_minutes"], str
             ):
-                try:
+                from contextlib import suppress
+
+                with suppress(ValueError):
                     parsed_event["alarm_minutes"] = int(parsed_event["alarm_minutes"])
-                except ValueError:
-                    pass  # Keep as string if not a valid int
 
             # Parse attendees JSON if provided
             if "attendees_json" in parsed_event:
@@ -208,7 +208,7 @@ async def bulk_create_events(
 
     except Exception as e:
         chronos_error = ChronosError(
-            message=f"Failed to bulk create events: {str(e)}",
+            message=f"Failed to bulk create events: {e!s}",
             details={
                 "tool": "bulk_create_events",
                 "calendar_uid": calendar_uid,
@@ -229,12 +229,12 @@ async def bulk_create_events(
 @handle_tool_errors
 async def bulk_delete_events(
     calendar_uid: str = Field(..., description="Calendar UID"),
-    event_uids: List[str] = Field(..., description="List of event UIDs to delete"),
+    event_uids: list[str] = Field(..., description="List of event UIDs to delete"),
     mode: str = Field("continue", description="Operation mode"),
     parallel: bool = Field(True, description="Execute operations in parallel"),
-    account: Optional[str] = Field(None, description="Account alias"),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Delete multiple events in bulk"""
     # Ensure managers are available for backwards compatibility with tests
     _ensure_managers_initialized()
@@ -290,9 +290,9 @@ async def bulk_create_tasks(
     tasks_json: str = Field(..., description="JSON array of task data"),
     mode: str = Field("continue", description="Operation mode"),
     parallel: bool = Field(True, description="Execute operations in parallel"),
-    account: Optional[str] = Field(None, description="Account alias"),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Create multiple tasks in bulk"""
     import json
 
@@ -305,7 +305,7 @@ async def bulk_create_tasks(
         if not isinstance(tasks_data, list):
             raise ValueError("Tasks data must be a JSON array")
     except (json.JSONDecodeError, ValueError) as e:
-        raise ValidationError(f"Invalid tasks JSON: {str(e)}")
+        raise ValidationError(f"Invalid tasks JSON: {e!s}")
 
     # Convert mode string to BulkOperationMode
     mode_mapping = {
@@ -336,9 +336,9 @@ async def bulk_create_tasks(
             account_alias=account,
         )
     except AttributeError as e:
-        raise RuntimeError(f"BulkOperationManager missing method: {str(e)}")
+        raise RuntimeError(f"BulkOperationManager missing method: {e!s}")
     except Exception as e:
-        logger.error(f"Bulk task creation failed: {type(e).__name__}: {str(e)}")
+        logger.error(f"Bulk task creation failed: {type(e).__name__}: {e!s}")
         raise
 
     return _format_bulk_response(
@@ -355,12 +355,12 @@ async def bulk_create_tasks(
 @handle_tool_errors
 async def bulk_delete_tasks(
     calendar_uid: str = Field(..., description="Calendar UID"),
-    task_uids: List[str] = Field(..., description="List of task UIDs to delete"),
+    task_uids: list[str] = Field(..., description="List of task UIDs to delete"),
     mode: str = Field("continue", description="Operation mode"),
     parallel: bool = Field(True, description="Execute operations in parallel"),
-    account: Optional[str] = Field(None, description="Account alias"),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Delete multiple tasks in bulk"""
     # Ensure managers are available for backwards compatibility with tests
     _ensure_managers_initialized()
@@ -408,9 +408,9 @@ async def bulk_create_journals(
     journals_json: str = Field(..., description="JSON array of journal data"),
     mode: str = Field("continue", description="Operation mode"),
     parallel: bool = Field(True, description="Execute operations in parallel"),
-    account: Optional[str] = Field(None, description="Account alias"),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Create multiple journal entries in bulk"""
     import json
 
@@ -423,7 +423,7 @@ async def bulk_create_journals(
         if not isinstance(journals_data, list):
             raise ValueError("Journals data must be a JSON array")
     except (json.JSONDecodeError, ValueError) as e:
-        raise ValidationError(f"Invalid journals JSON: {str(e)}")
+        raise ValidationError(f"Invalid journals JSON: {e!s}")
 
     # Convert mode string to BulkOperationMode
     mode_mapping = {
@@ -454,9 +454,9 @@ async def bulk_create_journals(
             account_alias=account,
         )
     except AttributeError as e:
-        raise RuntimeError(f"BulkOperationManager missing method: {str(e)}")
+        raise RuntimeError(f"BulkOperationManager missing method: {e!s}")
     except Exception as e:
-        logger.error(f"Bulk journal creation failed: {type(e).__name__}: {str(e)}")
+        logger.error(f"Bulk journal creation failed: {type(e).__name__}: {e!s}")
         raise
 
     return _format_bulk_response(
@@ -473,12 +473,12 @@ async def bulk_create_journals(
 @handle_tool_errors
 async def bulk_delete_journals(
     calendar_uid: str = Field(..., description="Calendar UID"),
-    journal_uids: List[str] = Field(..., description="List of journal UIDs to delete"),
+    journal_uids: list[str] = Field(..., description="List of journal UIDs to delete"),
     mode: str = Field("continue", description="Operation mode"),
     parallel: bool = Field(True, description="Execute operations in parallel"),
-    account: Optional[str] = Field(None, description="Account alias"),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Delete multiple journal entries in bulk"""
     # Ensure managers are available for backwards compatibility with tests
     _ensure_managers_initialized()
@@ -548,10 +548,10 @@ bulk_delete_journals.fn = bulk_delete_journals
 # Export all tools for backwards compatibility
 __all__ = [
     "bulk_create_events",
-    "bulk_delete_events",
-    "bulk_create_tasks",
-    "bulk_delete_tasks",
     "bulk_create_journals",
+    "bulk_create_tasks",
+    "bulk_delete_events",
     "bulk_delete_journals",
+    "bulk_delete_tasks",
     "register_bulk_tools",
 ]

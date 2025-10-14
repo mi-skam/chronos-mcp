@@ -6,9 +6,10 @@ iCalendar RRULE (recurrence rule) strings used in recurring events.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from dateutil.rrule import DAILY, MONTHLY, WEEKLY, YEARLY, rrulestr
+
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class RRuleValidator:
     }
 
     @classmethod
-    def validate_rrule(cls, rrule_string: str) -> Tuple[bool, Optional[str]]:
+    def validate_rrule(cls, rrule_string: str) -> tuple[bool, str | None]:
         """
         Validate an RRULE string for safety and correctness.
 
@@ -50,7 +51,7 @@ class RRuleValidator:
                 return False, "RRULE must start with FREQ="
 
             # Parse the rule to check validity
-            rule = rrulestr(rrule_string)
+            rrulestr(rrule_string)
 
             # Extract frequency
             freq_str = None
@@ -136,11 +137,11 @@ class RRuleValidator:
             return True, None
 
         except Exception as e:
-            logger.error(f"Error validating RRULE: {str(e)}")
-            return False, f"Invalid RRULE format: {str(e)}"
+            logger.error(f"Error validating RRULE: {e!s}")
+            return False, f"Invalid RRULE format: {e!s}"
 
     @staticmethod
-    def _extract_value(rrule_string: str, param: str) -> Optional[str]:
+    def _extract_value(rrule_string: str, param: str) -> str | None:
         """Extract a parameter value from an RRULE string."""
         for part in rrule_string.split(";"):
             if part.startswith(f"{param}="):
@@ -152,9 +153,9 @@ class RRuleValidator:
         cls,
         rrule_string: str,
         start_date: datetime,
-        end_date: Optional[datetime] = None,
+        end_date: datetime | None = None,
         limit: int = MAX_INSTANCES_TO_EXPAND,
-    ) -> List[datetime]:
+    ) -> list[datetime]:
         """
         Expand recurring rule to individual occurrences.
         Args:
@@ -188,11 +189,11 @@ class RRuleValidator:
             return occurrences
 
         except Exception as e:
-            logger.error(f"Error expanding RRULE occurrences: {str(e)}")
+            logger.error(f"Error expanding RRULE occurrences: {e!s}")
             return []
 
     @classmethod
-    def get_rrule_info(cls, rrule_string: str) -> Dict[str, Any]:
+    def get_rrule_info(cls, rrule_string: str) -> dict[str, Any]:
         """
         Extract information from an RRULE string.
 
@@ -202,7 +203,9 @@ class RRuleValidator:
         Returns:
             Dictionary with RRULE components
         """
-        info = {
+        from typing import Any
+
+        info: dict[str, Any] = {
             "frequency": None,
             "interval": 1,
             "count": None,
@@ -215,7 +218,7 @@ class RRuleValidator:
         for part in rrule_string.split(";"):
             if "=" in part:
                 key, value = part.split("=", 1)
-                key_lower = key.lower()
+                key.lower()
 
                 if key == "FREQ":
                     info["frequency"] = value

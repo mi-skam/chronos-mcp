@@ -394,7 +394,7 @@ END:VEVENT"""
         mgr = EventManager(mock_calendar_manager)
 
         # Update event
-        updated_event = mgr.update_event(
+        mgr.update_event(
             calendar_uid="cal-123",
             event_uid="evt-123",
             summary="Updated Title",

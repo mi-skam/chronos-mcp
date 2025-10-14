@@ -5,9 +5,13 @@ Tests the get_item_with_fallback utility function that eliminates
 8x code duplication across events, tasks, and journals managers.
 """
 
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
-from icalendar import Calendar as iCalendar, Event as iEvent, Todo as iTodo, Journal as iJournal
+from icalendar import Calendar as iCalendar
+from icalendar import Event as iEvent
+from icalendar import Journal as iJournal
+from icalendar import Todo as iTodo
 
 from chronos_mcp.caldav_utils import get_item_with_fallback
 
@@ -244,7 +248,9 @@ class TestGetItemWithFallback:
         """Test request_id is passed to logging context"""
         mock_calendar.event_by_uid = Mock(return_value=mock_event_item)
 
-        get_item_with_fallback(mock_calendar, "event-123", "event", request_id="req-789")
+        get_item_with_fallback(
+            mock_calendar, "event-123", "event", request_id="req-789"
+        )
 
         # Verify request_id appears in logs (implementation detail, but validates parameter is used)
         # Note: actual log verification would require caplog fixture and checking extra fields

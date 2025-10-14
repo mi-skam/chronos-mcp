@@ -44,7 +44,9 @@ class TestHandleToolErrors:
         @handle_tool_errors
         async def tool_with_generic_error(**kwargs):
             # Simulate an unexpected exception with sensitive data
-            raise ValueError("Database connection failed: password=mysecret123 token=abc-xyz-789")
+            raise ValueError(
+                "Database connection failed: password=mysecret123 token=abc-xyz-789"
+            )
 
         result = await tool_with_generic_error()
 
@@ -55,13 +57,17 @@ class TestHandleToolErrors:
 
         # CRITICAL SECURITY CHECK: Sensitive data MUST be redacted
         error_message = result["error"]
-        assert "password=mysecret123" not in error_message, \
+        assert "password=mysecret123" not in error_message, (
             "SECURITY FAILURE: Password leaked in generic exception"
-        assert "token=abc-xyz-789" not in error_message, \
+        )
+        assert "token=abc-xyz-789" not in error_message, (
             "SECURITY FAILURE: Token leaked in generic exception"
+        )
 
         # Should contain sanitized versions
-        assert "password=***" in error_message or "password" not in error_message.lower()
+        assert (
+            "password=***" in error_message or "password" not in error_message.lower()
+        )
         assert "token=***" in error_message or "token" not in error_message.lower()
 
     @pytest.mark.asyncio
@@ -70,7 +76,9 @@ class TestHandleToolErrors:
 
         @handle_tool_errors
         async def tool_with_url_error(**kwargs):
-            raise ConnectionError("Failed to connect to https://user:pass@example.com/api")
+            raise ConnectionError(
+                "Failed to connect to https://user:pass@example.com/api"
+            )
 
         result = await tool_with_url_error()
 
@@ -78,8 +86,9 @@ class TestHandleToolErrors:
         error_message = result["error"]
 
         # CRITICAL: URL credentials must be redacted
-        assert "user:pass" not in error_message, \
+        assert "user:pass" not in error_message, (
             "SECURITY FAILURE: URL credentials leaked in generic exception"
+        )
         assert "***:***@" in error_message or "user" not in error_message
 
     @pytest.mark.asyncio
@@ -96,8 +105,9 @@ class TestHandleToolErrors:
         error_message = result["error"]
 
         # CRITICAL: API key must be redacted
-        assert "sk_live_abc123xyz789" not in error_message, \
+        assert "sk_live_abc123xyz789" not in error_message, (
             "SECURITY FAILURE: API key leaked in generic exception"
+        )
         assert "api_key=***" in error_message or "api_key" not in error_message
 
     @pytest.mark.asyncio
@@ -132,4 +142,5 @@ class TestHandleToolErrors:
         assert "received_id" in result
         # Verify it's a valid UUID string
         import uuid
+
         uuid.UUID(result["received_id"])  # Will raise if invalid

@@ -3,12 +3,9 @@ Unit tests for bulk event creation functionality
 """
 
 import json
-from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
-
-from chronos_mcp.exceptions import ChronosError
 
 # Import the actual function directly
 from chronos_mcp.server import bulk_create_events
@@ -193,7 +190,7 @@ class TestBulkCreateEvents:
         assert result["failed"] == 1
 
         # Check failed event
-        failed = [d for d in result["details"] if not d["success"]][0]
+        failed = next(d for d in result["details"] if not d["success"])
         assert failed["index"] == 1
         assert "Creation failed" in failed["error"]
 

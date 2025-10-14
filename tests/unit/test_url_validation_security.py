@@ -25,9 +25,9 @@ class TestUrlValidationSecurity:
         ]
 
         for url in valid_urls:
-            assert validator.PATTERNS["url"].match(
-                url
-            ), f"Valid HTTPS URL should match: {url}"
+            assert validator.PATTERNS["url"].match(url), (
+                f"Valid HTTPS URL should match: {url}"
+            )
 
     def test_http_urls_rejected(self):
         """Test that HTTP URLs are rejected"""
@@ -43,9 +43,9 @@ class TestUrlValidationSecurity:
         ]
 
         for url in invalid_urls:
-            assert not validator.PATTERNS["url"].match(
-                url
-            ), f"HTTP URL should be rejected: {url}"
+            assert not validator.PATTERNS["url"].match(url), (
+                f"HTTP URL should be rejected: {url}"
+            )
 
     def test_malicious_url_schemes_rejected(self):
         """Test that malicious URL schemes are rejected"""
@@ -64,9 +64,9 @@ class TestUrlValidationSecurity:
         ]
 
         for url in malicious_urls:
-            assert not validator.PATTERNS["url"].match(
-                url
-            ), f"Malicious URL should be rejected: {url}"
+            assert not validator.PATTERNS["url"].match(url), (
+                f"Malicious URL should be rejected: {url}"
+            )
 
     def test_url_injection_attempts_rejected(self):
         """Test that URL injection attempts are rejected"""
@@ -80,9 +80,9 @@ class TestUrlValidationSecurity:
         ]
 
         for url in injection_urls:
-            assert not validator.PATTERNS["url"].match(
-                url
-            ), f"Dangerous URL should be rejected: {url}"
+            assert not validator.PATTERNS["url"].match(url), (
+                f"Dangerous URL should be rejected: {url}"
+            )
 
         # These URLs will match our pattern but contain potentially dangerous content
         # They should be caught by other validation layers (like dangerous pattern detection)
@@ -97,7 +97,7 @@ class TestUrlValidationSecurity:
         for url in potentially_dangerous_but_valid_format:
             # The URL pattern itself might match (that's OK), but dangerous content
             # should be caught by the DANGEROUS_PATTERNS in validate_text_field
-            result = validator.PATTERNS["url"].match(url)
+            validator.PATTERNS["url"].match(url)
             # This is acceptable - the URL format is valid, but content filtering should catch it
 
     def test_localhost_and_private_ips_pattern_matching(self):
@@ -116,9 +116,9 @@ class TestUrlValidationSecurity:
 
         for url in local_urls:
             # Pattern still matches for backward compatibility
-            assert validator.PATTERNS["url"].match(
-                url
-            ), f"Local/private URL pattern should match: {url}"
+            assert validator.PATTERNS["url"].match(url), (
+                f"Local/private URL pattern should match: {url}"
+            )
 
             # But validate_url blocks them by default (SSRF protection)
             with pytest.raises(ValidationError):
@@ -140,9 +140,9 @@ class TestUrlValidationSecurity:
         ]
 
         for url in urls_with_ports:
-            assert validator.PATTERNS["url"].match(
-                url
-            ), f"URL with port should be allowed: {url}"
+            assert validator.PATTERNS["url"].match(url), (
+                f"URL with port should be allowed: {url}"
+            )
 
     def test_empty_and_malformed_urls(self):
         """Test handling of empty and malformed URLs"""
@@ -162,15 +162,11 @@ class TestUrlValidationSecurity:
         ]
 
         for url in malformed_urls:
-            assert not validator.PATTERNS["url"].match(
-                url
-            ), f"Malformed URL should be rejected: {url}"
+            assert not validator.PATTERNS["url"].match(url), (
+                f"Malformed URL should be rejected: {url}"
+            )
 
         # These might match our pattern but are edge cases we should handle
-        edge_cases = [
-            "https://domain-without-tld",  # This will match as single hostname
-            "https://example..com/",  # This might match due to our regex
-        ]
 
         # Note: Some edge cases might pass the regex but should be caught by other validation
 
@@ -185,9 +181,9 @@ class TestUrlValidationSecurity:
         # The pattern itself should match, but length validation should happen elsewhere
         # This tests that the regex doesn't break with long inputs
         result = validator.PATTERNS["url"].match(long_url)
-        assert (
-            result is not None
-        ), "Long URL should match pattern (length validation is separate)"
+        assert result is not None, (
+            "Long URL should match pattern (length validation is separate)"
+        )
 
     def test_unicode_domains_handled(self):
         """Test handling of internationalized domain names"""
@@ -201,12 +197,12 @@ class TestUrlValidationSecurity:
 
         # Our current pattern is ASCII-only, which is actually a security feature
         # Unicode domains should be punycode-encoded first
-        assert validator.PATTERNS["url"].match(
-            unicode_domains[0]
-        ), "Punycode domain should be allowed"
-        assert not validator.PATTERNS["url"].match(
-            unicode_domains[1]
-        ), "Direct Unicode should be rejected (security feature)"
+        assert validator.PATTERNS["url"].match(unicode_domains[0]), (
+            "Punycode domain should be allowed"
+        )
+        assert not validator.PATTERNS["url"].match(unicode_domains[1]), (
+            "Direct Unicode should be rejected (security feature)"
+        )
 
     def test_case_sensitivity(self):
         """Test that URL scheme matching is case-sensitive for security"""
@@ -220,15 +216,15 @@ class TestUrlValidationSecurity:
             "https://EXAMPLE.COM/caldav",  # Domain case shouldn't matter
         ]
 
-        assert not validator.PATTERNS["url"].match(
-            case_variants[0]
-        ), "Uppercase HTTPS should be rejected"
-        assert not validator.PATTERNS["url"].match(
-            case_variants[1]
-        ), "Mixed case Https should be rejected"
-        assert not validator.PATTERNS["url"].match(
-            case_variants[2]
-        ), "Mixed case HTTPs should be rejected"
-        assert validator.PATTERNS["url"].match(
-            case_variants[3]
-        ), "Domain case should not matter"
+        assert not validator.PATTERNS["url"].match(case_variants[0]), (
+            "Uppercase HTTPS should be rejected"
+        )
+        assert not validator.PATTERNS["url"].match(case_variants[1]), (
+            "Mixed case Https should be rejected"
+        )
+        assert not validator.PATTERNS["url"].match(case_variants[2]), (
+            "Mixed case HTTPs should be rejected"
+        )
+        assert validator.PATTERNS["url"].match(case_variants[3]), (
+            "Domain case should not matter"
+        )

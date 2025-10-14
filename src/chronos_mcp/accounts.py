@@ -7,7 +7,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 import caldav
 from caldav import DAVClient, Principal
@@ -24,6 +24,7 @@ from .exceptions import (
 )
 from .logging_config import setup_logging
 from .models import AccountStatus
+
 
 logger = setup_logging()
 
@@ -94,10 +95,10 @@ class AccountManager:
 
     def __init__(self, config_manager: ConfigManager):
         self.config = config_manager
-        self.connections: Dict[str, DAVClient] = {}
-        self.principals: Dict[str, Principal] = {}
-        self._connection_locks: Dict[str, threading.Lock] = {}
-        self._connection_timestamps: Dict[str, float] = {}
+        self.connections: dict[str, DAVClient] = {}
+        self.principals: dict[str, Principal] = {}
+        self._connection_locks: dict[str, threading.Lock] = {}
+        self._connection_timestamps: dict[str, float] = {}
         self._connection_ttl_minutes: int = 30  # Connection TTL in minutes
 
         # Connection pool limits and health tracking
@@ -107,10 +108,10 @@ class AccountManager:
         self._base_retry_delay: float = 1.0  # Base delay for exponential backoff
 
         # Circuit breaker and health tracking
-        self._circuit_breakers: Dict[str, CircuitBreaker] = {}
-        self._connection_health: Dict[str, ConnectionHealth] = {}
+        self._circuit_breakers: dict[str, CircuitBreaker] = {}
+        self._connection_health: dict[str, ConnectionHealth] = {}
 
-    def connect_account(self, alias: str, request_id: Optional[str] = None) -> bool:
+    def connect_account(self, alias: str, request_id: str | None = None) -> bool:
         """Connect to a CalDAV account with circuit breaker and retry logic"""
         request_id = request_id or str(uuid.uuid4())
 
@@ -121,7 +122,7 @@ class AccountManager:
         # Check connection pool limits
         if (
             alias in self.connections
-            and len([k for k in self.connections.keys() if k == alias])
+            and len([k for k in self.connections if k == alias])
             >= self._max_connections_per_account
         ):
             logger.warning(f"Connection pool limit reached for account '{alias}'")
@@ -209,7 +210,7 @@ class AccountManager:
                     extra={"request_id": request_id},
                 )
                 # Don't retry auth errors
-                raise AccountAuthenticationError(alias, request_id=request_id)
+                raise AccountAuthenticationError(alias, request_id=request_id) from e
 
             except Exception as e:
                 last_exception = e
@@ -235,7 +236,7 @@ class AccountManager:
                     )
                     raise AccountConnectionError(
                         alias, original_error=last_exception, request_id=request_id
-                    )
+                    ) from last_exception
 
         # Should never reach here, but just in case
         raise AccountConnectionError(
@@ -276,16 +277,16 @@ class AccountManager:
                 return True
         return False
 
-    def get_connection_health(self, alias: str) -> Optional[ConnectionHealth]:
+    def get_connection_health(self, alias: str) -> ConnectionHealth | None:
         """Get connection health metrics for an account"""
         return self._connection_health.get(alias)
 
-    def get_circuit_breaker_status(self, alias: str) -> Optional[CircuitBreakerState]:
+    def get_circuit_breaker_status(self, alias: str) -> CircuitBreakerState | None:
         """Get circuit breaker status for an account"""
         breaker = self._circuit_breakers.get(alias)
         return breaker.state if breaker else None
 
-    def cleanup_stale_connections(self, max_age_minutes: Optional[int] = None):
+    def cleanup_stale_connections(self, max_age_minutes: int | None = None):
         """Remove connections older than max_age_minutes"""
         max_age = max_age_minutes or self._connection_ttl_minutes
         current_time = time.time()
@@ -315,7 +316,7 @@ class AccountManager:
         return age_minutes > self._connection_ttl_minutes
 
     @ErrorHandler.safe_operation(logger, default_return=None)
-    def get_connection(self, alias: Optional[str] = None) -> Optional[DAVClient]:
+    def get_connection(self, alias: str | None = None) -> DAVClient | None:
         """Get connection for an account - internal utility method
 
         Thread-safe connection management with proper TOCTOU prevention.
@@ -347,7 +348,7 @@ class AccountManager:
         return self.connections.get(alias)
 
     @ErrorHandler.safe_operation(logger, default_return=None)
-    def get_principal(self, alias: Optional[str] = None) -> Optional[Principal]:
+    def get_principal(self, alias: str | None = None) -> Principal | None:
         """Get principal for an account - internal utility method
 
         Thread-safe principal access with proper TOCTOU prevention.
@@ -377,9 +378,7 @@ class AccountManager:
 
         return self.principals.get(alias)
 
-    def test_account(
-        self, alias: str, request_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def test_account(self, alias: str, request_id: str | None = None) -> dict[str, Any]:
         """Test account connectivity and return structured result"""
         result = {"alias": alias, "connected": False, "calendars": 0, "error": None}
 

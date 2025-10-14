@@ -2,14 +2,10 @@
 Security-focused tests for credential management
 """
 
-import io
 import logging
-import sys
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
-import pytest
-
-from chronos_mcp.credentials import CredentialManager, get_credential_manager
+from chronos_mcp.credentials import CredentialManager
 
 
 class TestCredentialSecurity:
@@ -103,7 +99,6 @@ class TestCredentialSecurity:
             patch("chronos_mcp.credentials.keyring") as mock_keyring,
             patch("chronos_mcp.credentials.keyring.errors") as mock_errors,
         ):
-
             # Create a proper PasswordDeleteError exception
             class MockPasswordDeleteError(Exception):
                 pass

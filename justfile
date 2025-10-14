@@ -1,63 +1,112 @@
 # Chronos MCP - Development Tasks
 # https://just.systems/man/en/
-# Uses uv for fast Python package management: https://github.com/astral-sh/uv
 
 # Variables
 pytest_args := env_var_or_default("PYTEST_ARGS", "-v")
 coverage_target := "75"
 
-# Default recipe - show available commands
+# Show available commands
 default:
     @just --list
 
-# Check if uv is installed
-check-uv:
+# ============================================================================
+# SETUP
+# ============================================================================
+
+# Initialize development environment from scratch
+init: clean
+    @echo "🔧 Initializing development environment..."
     @uv --version || (echo "❌ uv not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh" && exit 1)
-    @echo "✅ uv installed: $(uv --version)"
-
-# Install package for production use
-install:
-    uv pip install -e .
-
-# Install package with development dependencies
-dev-install:
     uv sync --all-extras --dev
-    uv run pre-commit install || echo "pre-commit not available, skipping hook installation"
+    uv run pre-commit install || echo "⚠️  pre-commit not available"
+    @echo "✨ Development environment ready!"
+    @echo "Run 'just dev' to start the development server"
 
-# Format code with ruff and black
-format:
-    uv run ruff check src/chronos_mcp tests --fix || true
+# Install/sync dependencies from lock file
+install:
+    @echo "📦 Syncing dependencies..."
+    uv sync --all-extras --dev
+    @echo "✨ Dependencies synced"
+
+# Update all dependencies to latest versions
+update:
+    @echo "⬆️  Updating dependencies..."
+    uv lock --upgrade
+    uv sync --all-extras --dev
+    @echo "✨ Dependencies updated"
+
+# ============================================================================
+# DEVELOPMENT
+# ============================================================================
+
+# Run development server with MCP inspector
+dev:
+    @echo "🚀 Starting development server with MCP inspector..."
+    @echo "Inspector UI: http://localhost:5173"
+    @echo "Press Ctrl+C to stop\n"
+    npx @modelcontextprotocol/inspector uv run python -m chronos_mcp
+
+# Run production server
+prod:
+    @echo "🚀 Starting Chronos MCP server..."
+    uv run python -m chronos_mcp
+
+# ============================================================================
+# CODE QUALITY
+# ============================================================================
+
+# Auto-fix formatting and linting issues
+fix:
+    @echo "🔧 Auto-fixing code issues..."
+    uv run ruff check src/chronos_mcp tests --fix
     uv run ruff format src/chronos_mcp tests
-    uv run black src/chronos_mcp tests
+    @echo "✨ Code fixed and formatted"
 
-# Run all linters and checks
-lint:
-    @echo "Running ruff..."
+# Quick check: lint + types + unit tests (fast pre-commit check)
+check:
+    @echo "🔍 Running quick checks..."
+    @echo "\n📝 Linting..."
     uv run ruff check src/chronos_mcp tests
-    @echo "\nRunning black..."
-    uv run black --check src/chronos_mcp tests
-    @echo "\nRunning mypy..."
-    uv run mypy src/chronos_mcp
-
-# Check code formatting without modifying
-check-format:
     uv run ruff format src/chronos_mcp tests --check
-    uv run black --check src/chronos_mcp tests
+    @echo "\n🔎 Type checking..."
+    uv run mypy src/chronos_mcp
+    @echo "\n🧪 Running unit tests..."
+    uv run pytest tests/unit/ {{pytest_args}}
+    @echo "\n✨ All checks passed - ready to commit!"
+
+# Full CI/CD checks: everything including coverage and security
+ci:
+    @echo "🔍 Running full CI/CD checks..."
+    @echo "\n📝 Linting..."
+    uv run ruff check src/chronos_mcp tests
+    uv run ruff format src/chronos_mcp tests --check
+    @echo "\n🔎 Type checking..."
+    uv run mypy src/chronos_mcp
+    @echo "\n🧪 Running tests with coverage..."
+    uv run pytest tests/ \
+        --cov=src/chronos_mcp \
+        --cov-report=term-missing \
+        --cov-report=html \
+        --cov-fail-under={{coverage_target}} \
+        {{pytest_args}}
+    @echo "\n🔒 Security checks..."
+    uv run bandit -r src/chronos_mcp -f screen || echo "⚠️  Security issues found"
+    uv run safety scan || echo "⚠️  Vulnerable dependencies found"
+    @echo "\n📊 Complexity check..."
+    uv run radon cc src/chronos_mcp --min=C --show-complexity || echo "✓ All functions acceptable"
+    @echo "\n✨ All CI checks passed!"
+
+# ============================================================================
+# TESTING
+# ============================================================================
 
 # Run all tests
-test:
-    uv run pytest tests/ {{pytest_args}}
-
-# Run unit tests only
-test-unit:
-    uv run pytest tests/unit/ {{pytest_args}}
-
-# Run integration tests only
-test-integration:
-    uv run pytest tests/integration/ {{pytest_args}} || echo "No integration tests directory"
+test *args:
+    uv run pytest tests/ {{args}}
 
 # Run tests with coverage report
 coverage:
+    @echo "🧪 Running tests with coverage..."
     uv run pytest tests/ \
         --cov=src/chronos_mcp \
         --cov-report=term-missing \
@@ -65,139 +114,35 @@ coverage:
         --cov-report=xml \
         --cov-fail-under={{coverage_target}} \
         {{pytest_args}}
-    @echo "\n✨ Coverage report generated in htmlcov/index.html"
+    @echo "\n✨ Coverage report: htmlcov/index.html"
 
-# Run tests for a specific file
-test-file file:
-    uv run pytest {{file}} {{pytest_args}}
-
-# Check cyclomatic complexity with radon
-complexity:
-    @echo "Checking cyclomatic complexity (threshold: C rating = 11-20)..."
-    uv run radon cc src/chronos_mcp --min=C --show-complexity || echo "✓ All functions have acceptable complexity"
-
-# Run security checks
-security:
-    @echo "Running bandit security scan..."
-    uv run bandit -r src/chronos_mcp -f screen || echo "⚠️  Security issues found"
-    @echo "\nRunning safety dependency check..."
-    uv run safety check || echo "⚠️  Vulnerable dependencies found"
-
-# Run all quality checks (lint + test + security)
-check: lint test security
-
-# Clean build artifacts and caches
-clean:
-    rm -rf build/
-    rm -rf dist/
-    rm -rf *.egg-info
-    rm -rf .coverage
-    rm -rf htmlcov/
-    rm -rf coverage.xml
-    rm -rf .pytest_cache/
-    rm -rf .mypy_cache/
-    rm -rf .ruff_cache/
-    find . -type f -name "*.pyc" -delete
-    find . -type d -name "__pycache__" -delete
-
-# Deep clean including virtual environment
-clean-all: clean
-    rm -rf venv/
-    rm -rf .venv/
-    rm -rf .uv_cache/
+# ============================================================================
+# PUBLISHING
+# ============================================================================
 
 # Build distribution packages
 build: clean
+    @echo "📦 Building distribution packages..."
     uv build
+    @echo "✨ Build complete: dist/"
 
-# Check distribution packages
-check-dist: build
+# Publish to PyPI (or TestPyPI with --test flag)
+publish test="":
+    @echo "📤 Publishing to {{ if test == "--test" { "TestPyPI" } else { "PyPI" } }}..."
+    @just build
     uv run twine check dist/*
+    {{ if test == "--test" { "uv run twine upload --repository testpypi dist/*" } else { "uv run twine upload dist/*" } }}
+    @echo "✨ Published successfully!"
 
-# Publish to PyPI (requires credentials)
-publish: check-dist
-    uv run twine upload dist/*
+# ============================================================================
+# UTILITIES
+# ============================================================================
 
-# Publish to TestPyPI for testing
-publish-test: check-dist
-    uv run twine upload --repository testpypi dist/*
-
-# Run the MCP server
-server:
-    uv run python -m chronos_mcp
-
-# Run Radicale test CalDAV server
-radicale:
-    uv run python -m radicale --config tests/fixtures/radicale.conf
-
-# Run pre-commit hooks on all files
-pre-commit:
-    uv run pre-commit run --all-files
-
-# Update pre-commit hooks
-update-hooks:
-    uv run pre-commit autoupdate
-
-# Generate requirements.txt from uv.lock
-requirements:
-    uv pip compile pyproject.toml -o requirements.txt
-    @echo "✨ requirements.txt generated from uv.lock"
-
-# Update all dependencies
-update-deps:
-    uv lock --upgrade
-    @echo "✨ Dependencies updated in uv.lock"
-
-# Sync dependencies from uv.lock
-sync:
-    uv sync
-    @echo "✨ Dependencies synced from uv.lock"
-
-# Watch tests and re-run on changes (requires pytest-watch)
-watch:
-    uv run ptw -- {{pytest_args}}
-
-# Run type checking with mypy
-types:
-    uv run mypy src/chronos_mcp --strict --show-error-codes
-
-# Generate coverage badge (requires coverage-badge)
-badge:
-    uv run coverage-badge -o coverage.svg -f
-
-# Show project statistics
-stats:
-    @echo "=== Project Statistics ==="
-    @echo "\nLines of code:"
-    @find src/chronos_mcp -name "*.py" | xargs wc -l | tail -1
-    @echo "\nTest files:"
-    @find tests -name "test_*.py" | wc -l
-    @echo "\nCyclomatic complexity:"
-    @uv run radon cc src/chronos_mcp -s -a
-    @echo "\nMaintainability index:"
-    @uv run radon mi src/chronos_mcp -s
-
-# Initialize development environment from scratch
-init: clean check-uv dev-install
-    @echo "✨ Development environment initialized with uv"
-    @echo "Run 'just test' to verify installation"
-
-# Quick check before committing
-quick: format check-format test-unit
-    @echo "✨ Quick checks passed - ready to commit!"
-
-# Full CI/CD simulation locally
-ci: lint test coverage complexity security
-    @echo "✨ All CI checks passed!"
-
-# Show uv cache information
-uv-cache:
-    @echo "=== UV Cache Information ==="
-    @uv cache dir
-    @echo "\nCache size:"
-    @du -sh $(uv cache dir)
-
-# Clean uv cache
-uv-cache-clean:
-    uv cache clean
-    @echo "✨ UV cache cleaned"
+# Clean build artifacts and caches
+clean deep="":
+    @echo "🧹 Cleaning..."
+    rm -rf build/ dist/ *.egg-info .coverage htmlcov/ coverage.xml
+    rm -rf .pytest_cache/ .mypy_cache/ .ruff_cache/
+    find . -type f -name "*.pyc" -delete
+    find . -type d -name "__pycache__" -delete
+    {{ if deep == "--deep" { "rm -rf venv/ .venv/ .uv_cache/ && echo '🧹 Deep clean complete (including venv)'" } else { "echo '✨ Clean complete'" } }}

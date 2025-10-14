@@ -3,7 +3,7 @@ Unit tests for advanced search functionality
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 

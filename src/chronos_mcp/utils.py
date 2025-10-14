@@ -3,17 +3,17 @@ Utility functions for Chronos MCP
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Tuple, Union
 
 from dateutil import parser
 from icalendar import Event as iEvent
 
 from .logging_config import setup_logging
 
+
 logger = setup_logging()
 
 
-def parse_datetime(dt_str: Union[str, datetime]) -> datetime:
+def parse_datetime(dt_str: str | datetime) -> datetime:
     """Parse datetime string or return datetime object"""
     if isinstance(dt_str, datetime):
         return dt_str
@@ -45,10 +45,7 @@ def datetime_to_ical(dt: datetime, all_day: bool = False) -> str:
 
 def ical_to_datetime(ical_dt) -> datetime:
     """Convert iCalendar datetime to Python datetime"""
-    if hasattr(ical_dt, "dt"):
-        dt = ical_dt.dt
-    else:
-        dt = ical_dt
+    dt = ical_dt.dt if hasattr(ical_dt, "dt") else ical_dt
 
     # Handle date-only (all-day events)
     if not isinstance(dt, datetime):
@@ -83,7 +80,7 @@ def create_ical_event(event_data: dict) -> iEvent:
     return event
 
 
-def validate_rrule(rrule: str) -> Tuple[bool, Optional[str]]:
+def validate_rrule(rrule: str) -> tuple[bool, str | None]:
     """
     Validate RRULE syntax according to RFC 5545.
 
@@ -160,4 +157,4 @@ def validate_rrule(rrule: str) -> Tuple[bool, Optional[str]]:
         return True, None
 
     except Exception as e:
-        return False, f"Error parsing RRULE: {str(e)}"
+        return False, f"Error parsing RRULE: {e!s}"

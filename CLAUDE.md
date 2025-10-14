@@ -8,82 +8,87 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `just` (justfile) for task running - See [justfile](justfile) for all available commands
 - `uv` for Python package management - See [UV_MIGRATION.md](UV_MIGRATION.md) for details
 
-### Development
+### Quick Start
+
 ```bash
-# Check if uv is installed
-just check-uv
+# Initialize development environment
+just init
 
-# Install for development with all dependencies
-just dev-install
+# Start development server with live-reload
+just dev
 
-# Run the MCP server
-./run_chronos.sh
-# or
-python -m chronos_mcp
-
-# Format code (required before committing)
-just format
-
-# Run linting checks
-just lint
-
-# Run all tests
-just test
-
-# Run specific test categories
-just test-unit         # Unit tests only
-just test-integration  # Integration tests only
-
-# Run tests with coverage
-just coverage
-
-# Run a single test file
-just test-file tests/unit/test_events.py
-
-# Run a specific test
-pytest tests/unit/test_events.py::test_create_event -v
-
-# Clean build artifacts
-just clean
+# Fix linting and formatting issues
+just fix
 
 # Quick check before committing
-just quick
-
-# Full CI/CD simulation locally
-just ci
+just check
 ```
 
-### Linting and Formatting
+### All Commands (14 total)
 
-**IMPORTANT**: This project uses:
-- `ruff` for fast linting and formatting
-- `black` for additional formatting
-- `uv` to run all tools
-
+**SETUP**
 ```bash
-# Format with ruff and black
-just format
-
-# Check formatting without modifying
-just check-format
-
-# Type checking
-just types
-# or
-uv run mypy src/chronos_mcp
+just init          # Initialize from scratch (clean + install + setup)
+just install       # Sync dependencies from lock file
+just update        # Update all dependencies to latest versions
 ```
 
-### Dependency Management
+**DEVELOPMENT**
+```bash
+just dev           # Run server with live-reload (for development)
+just serve         # Run server (production mode)
+```
+
+**CODE QUALITY**
+```bash
+just fix           # Auto-fix formatting + linting (runs ruff --fix + format)
+just check         # Quick check: lint + types + unit tests (fast!)
+just ci            # Full CI/CD: check + coverage + security + complexity
+```
+
+**TESTING**
+```bash
+just test [args]   # Run tests (pass pytest args)
+just coverage      # Run tests with coverage report
+```
+
+**PUBLISHING**
+```bash
+just build         # Build distribution packages
+just publish       # Publish to PyPI (use --test for TestPyPI)
+```
+
+**UTILITIES**
+```bash
+just clean         # Clean build artifacts (use --deep to include venv)
+```
+
+### Common Workflows
 
 ```bash
-# Update dependencies
-just update-deps
+# Daily development
+just dev                              # Start dev server
 
-# Sync dependencies from uv.lock
-just sync
+# Fix code issues
+just fix                              # Auto-fix all linting/formatting
 
-# Generate requirements.txt
-just requirements
+# Before committing
+just check                            # Fast: lint + types + unit tests
+
+# Before pushing
+just ci                               # Full: everything including security
+
+# Run specific tests
+just test tests/unit/test_events.py   # Single file
+just test -k test_create_event        # By name pattern
+just test -v                          # Verbose output
+
+# Publishing
+just publish --test                   # Test on TestPyPI first
+just publish                          # Publish to PyPI
+
+# Deep clean
+just clean --deep                     # Remove venv and caches
 ```
 
 ## Architecture Overview

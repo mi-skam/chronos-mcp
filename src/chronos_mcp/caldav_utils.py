@@ -6,8 +6,10 @@ eliminating code duplication across events, tasks, and journals managers.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
+
 from icalendar import Calendar as iCalendar
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,7 @@ def get_item_with_fallback(
     calendar,
     uid: str,
     item_type: str,
-    request_id: Optional[str] = None,
+    request_id: str | None = None,
 ) -> Any:
     """
     Get CalDAV item by UID with automatic fallback to full search.
@@ -69,7 +71,9 @@ def get_item_with_fallback(
     }
 
     if item_type not in type_config:
-        raise ValueError(f"Invalid item_type: {item_type}. Must be 'event', 'task', or 'journal'")
+        raise ValueError(
+            f"Invalid item_type: {item_type}. Must be 'event', 'task', or 'journal'"
+        )
 
     config = type_config[item_type]
     by_uid_method = config["by_uid_method"]
@@ -113,10 +117,7 @@ def get_item_with_fallback(
         for item in items:
             # Check if UID matches in the raw data (fast check)
             # Handle both bytes (real CalDAV) and string (test mocks)
-            if isinstance(item.data, bytes):
-                uid_to_check = uid.encode('utf-8')
-            else:
-                uid_to_check = uid
+            uid_to_check = uid.encode("utf-8") if isinstance(item.data, bytes) else uid
 
             if uid_to_check in item.data:
                 # Parse iCalendar to verify exact UID match

@@ -4,13 +4,13 @@ Thread safety tests for connection management
 
 import threading
 import time
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from chronos_mcp.accounts import AccountManager
 from chronos_mcp.config import ConfigManager
-from chronos_mcp.models import Account, AccountStatus
+from chronos_mcp.models import Account
 
 
 class TestThreadSafety:
@@ -45,7 +45,6 @@ class TestThreadSafety:
             patch("chronos_mcp.accounts.DAVClient") as mock_dav_client,
             patch("chronos_mcp.accounts.get_credential_manager") as mock_cred_mgr,
         ):
-
             # Setup mocks
             mock_client = Mock()
             mock_principal = Mock()
@@ -95,21 +94,21 @@ class TestThreadSafety:
 
             # Verify results
             assert len(results) == 5, "All threads should have completed"
-            assert all(
-                r is not None for r in results
-            ), "All threads should have gotten a connection"
+            assert all(r is not None for r in results), (
+                "All threads should have gotten a connection"
+            )
 
             # Most importantly: only one connection should have been created
             assert len(manager.connections) == 1, "Only one connection should exist"
-            assert (
-                "test_account" in manager.connections
-            ), "Connection should be for test_account"
+            assert "test_account" in manager.connections, (
+                "Connection should be for test_account"
+            )
 
             # Verify connect was called only once despite multiple concurrent requests
             # (The exact number may vary due to timing, but should be minimal)
-            assert (
-                len(connection_attempts) <= 2
-            ), f"Too many connection attempts: {len(connection_attempts)}"
+            assert len(connection_attempts) <= 2, (
+                f"Too many connection attempts: {len(connection_attempts)}"
+            )
 
     def test_concurrent_principal_access(self, mock_config_with_account):
         """Test that concurrent principal access is thread-safe"""
@@ -117,7 +116,6 @@ class TestThreadSafety:
             patch("chronos_mcp.accounts.DAVClient") as mock_dav_client,
             patch("chronos_mcp.accounts.get_credential_manager") as mock_cred_mgr,
         ):
-
             # Setup mocks
             mock_client = Mock()
             mock_principal = Mock()
@@ -153,15 +151,15 @@ class TestThreadSafety:
 
             # Verify results
             assert len(results) == 3, "All threads should have completed"
-            assert all(
-                r is not None for r in results
-            ), "All threads should have gotten a principal"
+            assert all(r is not None for r in results), (
+                "All threads should have gotten a principal"
+            )
 
             # Only one principal should exist in cache
             assert len(manager.principals) == 1, "Only one principal should exist"
-            assert (
-                "test_account" in manager.principals
-            ), "Principal should be for test_account"
+            assert "test_account" in manager.principals, (
+                "Principal should be for test_account"
+            )
 
     def test_connection_lock_per_account(self, mock_config_with_account):
         """Test that different accounts have different locks"""
@@ -169,7 +167,6 @@ class TestThreadSafety:
             patch("chronos_mcp.accounts.DAVClient") as mock_dav_client,
             patch("chronos_mcp.accounts.get_credential_manager") as mock_cred_mgr,
         ):
-
             # Setup mocks for multiple accounts
             mock_client = Mock()
             mock_principal = Mock()
@@ -217,12 +214,12 @@ class TestThreadSafety:
 
             # Verify all accounts got connections
             assert len(results) == 3, "All threads should have completed"
-            assert (
-                len(manager.connections) == 3
-            ), "Should have connections for all accounts"
-            assert (
-                len(manager._connection_locks) == 3
-            ), "Should have locks for all accounts"
+            assert len(manager.connections) == 3, (
+                "Should have connections for all accounts"
+            )
+            assert len(manager._connection_locks) == 3, (
+                "Should have locks for all accounts"
+            )
 
             # Verify different locks for different accounts
             lock_ids = set()
@@ -238,7 +235,6 @@ class TestThreadSafety:
             patch("chronos_mcp.accounts.DAVClient") as mock_dav_client,
             patch("chronos_mcp.accounts.get_credential_manager") as mock_cred_mgr,
         ):
-
             # Setup mock to fail on first call, succeed on others
             call_count = 0
 

@@ -2,6 +2,7 @@
 Unit tests for account management
 """
 
+import contextlib
 import time
 from unittest.mock import Mock, patch
 
@@ -175,10 +176,8 @@ class TestAccountManager:
 
             # Try to connect multiple times to trigger circuit breaker
             for _ in range(6):  # Exceeds failure threshold of 5
-                try:
+                with contextlib.suppress(AccountConnectionError):
                     mgr.connect_account("test_account")
-                except AccountConnectionError:
-                    pass
 
             # Circuit breaker should be OPEN
             breaker_state = mgr.get_circuit_breaker_status("test_account")
@@ -231,15 +230,18 @@ class TestAccountManager:
             mock_client.principal.return_value = Mock()
             return mock_client
 
-        with patch(
-            "chronos_mcp.accounts.DAVClient", side_effect=mock_dav_client_side_effect
-        ):
-            with patch("time.sleep") as mock_sleep:  # Mock sleep for testing
-                result = mgr.connect_account("test_account")
+        with (
+            patch(
+                "chronos_mcp.accounts.DAVClient",
+                side_effect=mock_dav_client_side_effect,
+            ),
+            patch("time.sleep") as mock_sleep,
+        ):  # Mock sleep for testing
+            result = mgr.connect_account("test_account")
 
-                assert result is True
-                assert call_count == 3  # Should have retried
-                assert mock_sleep.call_count == 2  # 2 sleeps before success
+            assert result is True
+            assert call_count == 3  # Should have retried
+            assert mock_sleep.call_count == 2  # 2 sleeps before success
 
     def test_connection_timeout_configuration(
         self, mock_config_manager, sample_account
@@ -266,12 +268,14 @@ class TestAccountManager:
 
     def test_password_validation_in_add_account(self):
         """Test that password is validated when adding an account"""
-        from chronos_mcp.validation import InputValidator
         from chronos_mcp.exceptions import ValidationError
+        from chronos_mcp.validation import InputValidator
 
         # Test with control characters in password - should be rejected
         with pytest.raises(ValidationError) as exc_info:
-            InputValidator.validate_text_field("pass\x00word", "password", required=True)
+            InputValidator.validate_text_field(
+                "pass\x00word", "password", required=True
+            )
         assert "potentially dangerous content" in str(exc_info.value).lower()
 
         # Test with excessively long password - should be rejected
@@ -280,13 +284,18 @@ class TestAccountManager:
         assert "maximum" in str(exc_info.value).lower()
 
         # Test with valid password - should pass
-        result = InputValidator.validate_text_field("ValidP@ssw0rd!", "password", required=True)
+        result = InputValidator.validate_text_field(
+            "ValidP@ssw0rd!", "password", required=True
+        )
         assert result == "ValidP@ssw0rd!"
 
     @patch("chronos_mcp.tools.accounts._managers")
-    def test_add_account_validates_password(self, mock_managers_dict, mock_config_manager):
+    def test_add_account_validates_password(
+        self, mock_managers_dict, mock_config_manager
+    ):
         """Test that add_account tool validates password input"""
         import asyncio
+
         from chronos_mcp.tools.accounts import add_account
 
         # Setup managers
@@ -296,7 +305,7 @@ class TestAccountManager:
             "alias": "test",
             "connected": True,
             "calendars": 2,
-            "error": None
+            "error": None,
         }
 
         def manager_getter(key):
@@ -310,13 +319,15 @@ class TestAccountManager:
 
         # Test with invalid password (control character)
         # The decorator catches exceptions and returns error dict
-        result = asyncio.run(add_account(
-            alias="test",
-            url="https://example.com",
-            username="user",
-            password="pass\x00word",  # Null byte
-            allow_local=True
-        ))
+        result = asyncio.run(
+            add_account(
+                alias="test",
+                url="https://example.com",
+                username="user",
+                password="pass\x00word",  # Null byte
+                allow_local=True,
+            )
+        )
 
         # Should return error response
         assert result["success"] is False

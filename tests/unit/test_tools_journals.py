@@ -3,26 +3,23 @@ Comprehensive unit tests for chronos_mcp/tools/journals.py module
 Tests all MCP journal tool functions for 100% coverage with defensive programming patterns
 """
 
-import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, Mock, patch, AsyncMock
-from typing import Dict, Any
+from unittest.mock import Mock, patch
+
 import pytest
 
-from chronos_mcp.tools.journals import (
-    create_journal,
-    list_journals,
-    update_journal,
-    delete_journal,
-    register_journal_tools,
-    _managers,
-)
 from chronos_mcp.exceptions import (
     CalendarNotFoundError,
-    EventNotFoundError,
-    EventCreationError,
-    ValidationError,
     ChronosError,
+    ValidationError,
+)
+from chronos_mcp.tools.journals import (
+    _managers,
+    create_journal,
+    delete_journal,
+    list_journals,
+    register_journal_tools,
+    update_journal,
 )
 
 
@@ -283,7 +280,9 @@ class TestJournalTools:
     async def test_list_journals_limit_type_error(self, setup_managers):
         """Test list_journals handles TypeError in limit conversion"""
         result = await list_journals.fn(
-            calendar_uid="cal-123", account=None, limit={}  # TypeError when int({})
+            calendar_uid="cal-123",
+            account=None,
+            limit={},  # TypeError when int({})
         )
 
         assert result["journals"] == []

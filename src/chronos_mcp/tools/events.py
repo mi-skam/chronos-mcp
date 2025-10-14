@@ -4,8 +4,8 @@ Event management tools for Chronos MCP
 
 import json
 import uuid
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union
+from datetime import timedelta
+from typing import Any
 
 from pydantic import Field
 
@@ -23,12 +23,12 @@ from ..logging_config import setup_logging
 from ..rrule import RRuleValidator
 from ..utils import parse_datetime
 from ..validation import InputValidator
-from .base import create_success_response, handle_tool_errors
+
 
 logger = setup_logging()
 
 # Module-level managers dictionary for dependency injection
-_managers = {}
+_managers: dict[str, Any] = {}
 
 
 # Event tool functions - defined as standalone functions for importability
@@ -37,25 +37,25 @@ async def create_event(
     summary: str = Field(..., description="Event title/summary"),
     start: str = Field(..., description="Event start time (ISO format)"),
     end: str = Field(..., description="Event end time (ISO format)"),
-    description: Optional[str] = Field(None, description="Event description"),
-    location: Optional[str] = Field(None, description="Event location"),
+    description: str | None = Field(None, description="Event description"),
+    location: str | None = Field(None, description="Event location"),
     all_day: bool = Field(False, description="Whether this is an all-day event"),
-    alarm_minutes: Optional[str] = Field(
+    alarm_minutes: str | None = Field(
         None,
         description="Reminder minutes before event as string ('-10080' to '10080')",
     ),
-    recurrence_rule: Optional[str] = Field(
+    recurrence_rule: str | None = Field(
         None, description="RRULE for recurring events (e.g., 'FREQ=WEEKLY;BYDAY=MO')"
     ),
-    attendees_json: Optional[str] = Field(
+    attendees_json: str | None = Field(
         None,
         description="JSON string of attendees list [{email, name, role, status, rsvp}]",
     ),
-    related_to: Optional[List[str]] = Field(
+    related_to: list[str] | None = Field(
         None, description="List of related component UIDs"
     ),
-    account: Optional[str] = Field(None, description="Account alias"),
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+) -> dict[str, Any]:
     """Create a new calendar event"""
     request_id = str(uuid.uuid4())
 
@@ -194,7 +194,7 @@ async def create_event(
 
     except Exception as e:
         chronos_error = ChronosError(
-            message=f"Failed to create event: {str(e)}",
+            message=f"Failed to create event: {e!s}",
             details={
                 "tool": "create_event",
                 "summary": summary,
@@ -218,8 +218,8 @@ async def get_events_range(
     calendar_uid: str = Field(..., description="Calendar UID"),
     start_date: str = Field(..., description="Start date (ISO format)"),
     end_date: str = Field(..., description="End date (ISO format)"),
-    account: Optional[str] = Field(None, description="Account alias"),
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+) -> dict[str, Any]:
     """Get events within a date range"""
     request_id = str(uuid.uuid4())
 
@@ -288,7 +288,7 @@ async def get_events_range(
 
     except Exception as e:
         chronos_error = ChronosError(
-            message=f"Failed to retrieve events: {str(e)}",
+            message=f"Failed to retrieve events: {e!s}",
             details={
                 "tool": "get_events_range",
                 "calendar_uid": calendar_uid,
@@ -311,8 +311,8 @@ async def get_events_range(
 async def delete_event(
     calendar_uid: str = Field(..., description="Calendar UID"),
     event_uid: str = Field(..., description="Event UID to delete"),
-    account: Optional[str] = Field(None, description="Account alias"),
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+) -> dict[str, Any]:
     """Delete a calendar event"""
     request_id = str(uuid.uuid4())
 
@@ -365,7 +365,7 @@ async def delete_event(
 
     except Exception as e:
         chronos_error = ChronosError(
-            message=f"Failed to delete event: {str(e)}",
+            message=f"Failed to delete event: {e!s}",
             details={
                 "tool": "delete_event",
                 "event_uid": event_uid,
@@ -388,25 +388,21 @@ async def delete_event(
 async def update_event(
     calendar_uid: str = Field(..., description="Calendar UID"),
     event_uid: str = Field(..., description="Event UID to update"),
-    summary: Optional[str] = Field(None, description="Event title/summary"),
-    start: Optional[str] = Field(None, description="Event start time (ISO format)"),
-    end: Optional[str] = Field(None, description="Event end time (ISO format)"),
-    description: Optional[str] = Field(None, description="Event description"),
-    location: Optional[str] = Field(None, description="Event location"),
-    all_day: Optional[bool] = Field(
-        None, description="Whether this is an all-day event"
-    ),
-    alarm_minutes: Optional[str] = Field(
+    summary: str | None = Field(None, description="Event title/summary"),
+    start: str | None = Field(None, description="Event start time (ISO format)"),
+    end: str | None = Field(None, description="Event end time (ISO format)"),
+    description: str | None = Field(None, description="Event description"),
+    location: str | None = Field(None, description="Event location"),
+    all_day: bool | None = Field(None, description="Whether this is an all-day event"),
+    alarm_minutes: str | None = Field(
         None, description="Reminder minutes before event"
     ),
-    recurrence_rule: Optional[str] = Field(
-        None, description="RRULE for recurring events"
-    ),
-    attendees_json: Optional[str] = Field(
+    recurrence_rule: str | None = Field(None, description="RRULE for recurring events"),
+    attendees_json: str | None = Field(
         None, description="JSON string of attendees list"
     ),
-    account: Optional[str] = Field(None, description="Account alias"),
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+) -> dict[str, Any]:
     """Update an existing calendar event. Only provided fields will be updated."""
     request_id = str(uuid.uuid4())
 
@@ -450,7 +446,7 @@ async def update_event(
         logger.error(f"Update event failed: {e}")
         return {
             "success": False,
-            "error": f"Failed to update event: {str(e)}",
+            "error": f"Failed to update event: {e!s}",
             "request_id": request_id,
         }
 
@@ -459,20 +455,18 @@ async def create_recurring_event(
     calendar_uid: str = Field(..., description="Calendar UID"),
     summary: str = Field(..., description="Event title/summary"),
     start: str = Field(..., description="Event start time (ISO format)"),
-    duration_minutes: Union[int, str] = Field(
-        ..., description="Event duration in minutes"
-    ),
+    duration_minutes: int | str = Field(..., description="Event duration in minutes"),
     recurrence_rule: str = Field(..., description="RRULE for recurring events"),
-    description: Optional[str] = Field(None, description="Event description"),
-    location: Optional[str] = Field(None, description="Event location"),
-    alarm_minutes: Optional[str] = Field(
+    description: str | None = Field(None, description="Event description"),
+    location: str | None = Field(None, description="Event location"),
+    alarm_minutes: str | None = Field(
         None, description="Reminder minutes before event"
     ),
-    attendees_json: Optional[str] = Field(
+    attendees_json: str | None = Field(
         None, description="JSON string of attendees list"
     ),
-    account: Optional[str] = Field(None, description="Account alias"),
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+) -> dict[str, Any]:
     """Create a recurring event with validation."""
     request_id = str(uuid.uuid4())
 
@@ -523,23 +517,23 @@ async def create_recurring_event(
         logger.error(f"Create recurring event failed: {e}")
         return {
             "success": False,
-            "error": f"Failed to create recurring event: {str(e)}",
+            "error": f"Failed to create recurring event: {e!s}",
             "request_id": request_id,
         }
 
 
 async def search_events(
     query: str = Field(..., description="Search query"),
-    fields: List[str] = Field(
+    fields: list[str] = Field(
         ["summary", "description", "location"], description="Fields to search in"
     ),
     case_sensitive: bool = Field(False, description="Case sensitive search"),
-    date_start: Optional[str] = Field(None, description="Start date for search range"),
-    date_end: Optional[str] = Field(None, description="End date for search range"),
-    calendar_uid: Optional[str] = Field(None, description="Calendar UID to search in"),
+    date_start: str | None = Field(None, description="Start date for search range"),
+    date_end: str | None = Field(None, description="End date for search range"),
+    calendar_uid: str | None = Field(None, description="Calendar UID to search in"),
     max_results: int = Field(50, description="Maximum number of results"),
-    account: Optional[str] = Field(None, description="Account alias"),
-) -> Dict[str, Any]:
+    account: str | None = Field(None, description="Account alias"),
+) -> dict[str, Any]:
     """Search for events across calendars with advanced filtering"""
     request_id = str(uuid.uuid4())
 
@@ -598,7 +592,10 @@ async def search_events(
                             account_alias=account,
                         )
                         events.extend(cal_events)
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(
+                            f"Skipping calendar {cal.uid} during search due to error: {type(e).__name__}"
+                        )
                         continue  # Skip calendars that error
 
                 # Limit results
@@ -642,7 +639,7 @@ async def search_events(
                 "request_id": request_id,
             }
 
-        except Exception as e:
+        except Exception:
             return {
                 "success": True,  # Tests expect success=True even with errors in some calendars
                 "matches": [],
@@ -656,7 +653,7 @@ async def search_events(
         logger.error(f"Search events failed: {e}")
         return {
             "success": False,
-            "error": f"Failed to search events: {str(e)}",
+            "error": f"Failed to search events: {e!s}",
             "request_id": request_id,
         }
 
@@ -689,10 +686,10 @@ search_events.fn = search_events
 # Export all tools for backwards compatibility
 __all__ = [
     "create_event",
-    "get_events_range",
-    "delete_event",
-    "update_event",
     "create_recurring_event",
-    "search_events",
+    "delete_event",
+    "get_events_range",
     "register_event_tools",
+    "search_events",
+    "update_event",
 ]

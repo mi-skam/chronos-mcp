@@ -7,12 +7,13 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 from .exceptions import ErrorSanitizer
 from .logging_config import setup_logging
 from .models import TaskStatus
 from .utils import parse_datetime
+
 
 logger = setup_logging()
 
@@ -46,8 +47,8 @@ class OperationResult:
 
     index: int
     success: bool
-    uid: Optional[str] = None
-    error: Optional[str] = None
+    uid: str | None = None
+    error: str | None = None
     duration_ms: float = 0.0
 
 
@@ -58,18 +59,18 @@ class BulkResult:
     total: int
     successful: int
     failed: int
-    results: List[OperationResult] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    results: list[OperationResult] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     duration_ms: float = 0.0
 
     @property
     def success_rate(self) -> float:
         return (self.successful / self.total * 100) if self.total > 0 else 0.0
 
-    def get_failures(self) -> List[OperationResult]:
+    def get_failures(self) -> list[OperationResult]:
         return [r for r in self.results if not r.success]
 
-    def get_successes(self) -> List[OperationResult]:
+    def get_successes(self) -> list[OperationResult]:
         return [r for r in self.results if r.success]
 
 
@@ -87,7 +88,7 @@ class BulkOperationManager:
         self._backpressure_lock = threading.Lock()
 
     def _calculate_adaptive_parallelism(
-        self, options: BulkOptions, operation_type: str, recent_performance: List[float]
+        self, options: BulkOptions, operation_type: str, recent_performance: list[float]
     ) -> int:
         """Calculate optimal parallelism based on recent performance"""
         if not options.adaptive_scaling or not recent_performance:
@@ -121,7 +122,7 @@ class BulkOperationManager:
             if len(perf_list) > 50:
                 perf_list.pop(0)
 
-    def _get_recent_performance(self, operation_type: str) -> List[float]:
+    def _get_recent_performance(self, operation_type: str) -> list[float]:
         """Get recent performance measurements"""
         with self._backpressure_lock:
             return self._performance_tracker.get(operation_type, []).copy()
@@ -129,9 +130,9 @@ class BulkOperationManager:
     def bulk_create_events(
         self,
         calendar_uid: str,
-        events: List[Dict[str, Any]],
+        events: list[dict[str, Any]],
         options: BulkOptions = None,
-        account_alias: Optional[str] = None,
+        account_alias: str | None = None,
     ) -> BulkResult:
         """Create multiple events with configurable error handling."""
         if options is None:
@@ -230,9 +231,9 @@ class BulkOperationManager:
     def bulk_create_tasks(
         self,
         calendar_uid: str,
-        tasks: List[Dict[str, Any]],
+        tasks: list[dict[str, Any]],
         options: BulkOptions = None,
-        account_alias: Optional[str] = None,
+        account_alias: str | None = None,
     ) -> BulkResult:
         """Create multiple tasks with configurable error handling."""
         if options is None:
@@ -313,9 +314,9 @@ class BulkOperationManager:
     def bulk_create_journals(
         self,
         calendar_uid: str,
-        journals: List[Dict[str, Any]],
+        journals: list[dict[str, Any]],
         options: BulkOptions = None,
-        account_alias: Optional[str] = None,
+        account_alias: str | None = None,
     ) -> BulkResult:
         """Create multiple journals with configurable error handling."""
         if options is None:
@@ -393,7 +394,7 @@ class BulkOperationManager:
         result.duration_ms = (time.time() - start_time) * 1000
         return result
 
-    def _validate_events(self, events: List[Dict[str, Any]]) -> List[Tuple[int, str]]:
+    def _validate_events(self, events: list[dict[str, Any]]) -> list[tuple[int, str]]:
         """Validate event data before execution."""
         errors = []
 
@@ -419,7 +420,7 @@ class BulkOperationManager:
 
         return errors
 
-    def _validate_tasks(self, tasks: List[Dict[str, Any]]) -> List[Tuple[int, str]]:
+    def _validate_tasks(self, tasks: list[dict[str, Any]]) -> list[tuple[int, str]]:
         """Validate task data before execution."""
         errors = []
 
@@ -470,8 +471,8 @@ class BulkOperationManager:
         return errors
 
     def _validate_journals(
-        self, journals: List[Dict[str, Any]]
-    ) -> List[Tuple[int, str]]:
+        self, journals: list[dict[str, Any]]
+    ) -> list[tuple[int, str]]:
         """Validate journal data before execution."""
         errors = []
 
@@ -493,11 +494,11 @@ class BulkOperationManager:
     def _execute_batch_create(
         self,
         calendar_uid: str,
-        batch: List[Dict],
+        batch: list[dict],
         start_idx: int,
         options: BulkOptions,
-        account_alias: Optional[str] = None,
-    ) -> List[OperationResult]:
+        account_alias: str | None = None,
+    ) -> list[OperationResult]:
         """Execute a batch of create operations in parallel using ThreadPoolExecutor."""
         if not self.event_manager:
             raise ValueError("EventManager not provided to BulkOperationManager")
@@ -551,7 +552,7 @@ class BulkOperationManager:
                 for idx, idx_event in enumerate(indexed_batch)
             }
 
-            results: List[Optional[OperationResult]] = [None] * len(batch)
+            results: list[OperationResult | None] = [None] * len(batch)
 
             try:
                 for future in concurrent.futures.as_completed(
@@ -577,7 +578,9 @@ class BulkOperationManager:
                         results[batch_idx] = OperationResult(
                             index=start_idx + batch_idx,
                             success=False,
-                            error=ErrorSanitizer.sanitize_message(f"Executor error: {e}"),
+                            error=ErrorSanitizer.sanitize_message(
+                                f"Executor error: {e}"
+                            ),
                             duration_ms=0,
                         )
             except concurrent.futures.TimeoutError:
@@ -598,11 +601,11 @@ class BulkOperationManager:
     def _execute_batch_create_tasks(
         self,
         calendar_uid: str,
-        batch: List[Dict],
+        batch: list[dict],
         start_idx: int,
         options: BulkOptions,
-        account_alias: Optional[str] = None,
-    ) -> List[OperationResult]:
+        account_alias: str | None = None,
+    ) -> list[OperationResult]:
         """Execute a batch of task create operations."""
         results = []
 
@@ -661,11 +664,11 @@ class BulkOperationManager:
     def _execute_batch_create_journals(
         self,
         calendar_uid: str,
-        batch: List[Dict],
+        batch: list[dict],
         start_idx: int,
         options: BulkOptions,
-        account_alias: Optional[str] = None,
-    ) -> List[OperationResult]:
+        account_alias: str | None = None,
+    ) -> list[OperationResult]:
         """Execute a batch of journal create operations."""
         results = []
 
@@ -711,7 +714,7 @@ class BulkOperationManager:
 
         return results
 
-    def _rollback_created_events(self, calendar_uid: str, uids: List[str]) -> List[str]:
+    def _rollback_created_events(self, calendar_uid: str, uids: list[str]) -> list[str]:
         """Rollback created events in case of atomic operation failure.
 
         Returns:
@@ -728,7 +731,7 @@ class BulkOperationManager:
                     failed_rollbacks.append(uid)
         return failed_rollbacks
 
-    def _rollback_created_tasks(self, calendar_uid: str, uids: List[str]) -> List[str]:
+    def _rollback_created_tasks(self, calendar_uid: str, uids: list[str]) -> list[str]:
         """Rollback created tasks in case of atomic operation failure.
 
         Returns:
@@ -745,7 +748,9 @@ class BulkOperationManager:
                     failed_rollbacks.append(uid)
         return failed_rollbacks
 
-    def _rollback_created_journals(self, calendar_uid: str, uids: List[str]) -> List[str]:
+    def _rollback_created_journals(
+        self, calendar_uid: str, uids: list[str]
+    ) -> list[str]:
         """Rollback created journals in case of atomic operation failure.
 
         Returns:
@@ -763,7 +768,7 @@ class BulkOperationManager:
         return failed_rollbacks
 
     def bulk_delete_events(
-        self, calendar_uid: str, event_uids: List[str], options: BulkOptions = None
+        self, calendar_uid: str, event_uids: list[str], options: BulkOptions = None
     ) -> BulkResult:
         """Delete multiple events efficiently."""
         if options is None:
@@ -802,7 +807,6 @@ class BulkOperationManager:
                         )
                         result.successful += 1
                     except Exception as e:
-
                         result.results.append(
                             OperationResult(
                                 index=batch_start + idx,
@@ -824,7 +828,7 @@ class BulkOperationManager:
         return result
 
     def bulk_delete_tasks(
-        self, calendar_uid: str, task_uids: List[str], options: BulkOptions = None
+        self, calendar_uid: str, task_uids: list[str], options: BulkOptions = None
     ) -> BulkResult:
         """Delete multiple tasks efficiently."""
         if options is None:
@@ -863,7 +867,6 @@ class BulkOperationManager:
                         )
                         result.successful += 1
                     except Exception as e:
-
                         result.results.append(
                             OperationResult(
                                 index=batch_start + idx,
@@ -885,7 +888,7 @@ class BulkOperationManager:
         return result
 
     def bulk_delete_journals(
-        self, calendar_uid: str, journal_uids: List[str], options: BulkOptions = None
+        self, calendar_uid: str, journal_uids: list[str], options: BulkOptions = None
     ) -> BulkResult:
         """Delete multiple journals efficiently."""
         if options is None:
@@ -924,7 +927,6 @@ class BulkOperationManager:
                         )
                         result.successful += 1
                     except Exception as e:
-
                         result.results.append(
                             OperationResult(
                                 index=batch_start + idx,

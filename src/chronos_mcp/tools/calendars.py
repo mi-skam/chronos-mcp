@@ -2,33 +2,30 @@
 Calendar management tools for Chronos MCP
 """
 
-import uuid
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import Field
 
 from ..exceptions import (
-    CalendarNotFoundError,
-    ChronosError,
-    ErrorSanitizer,
     ValidationError,
 )
 from ..logging_config import setup_logging
 from ..validation import InputValidator
 from .base import create_success_response, handle_tool_errors
 
+
 logger = setup_logging()
 
 # Module-level managers dictionary for dependency injection
-_managers = {}
+_managers: dict[str, Any] = {}
 
 
 # Calendar tool functions - defined as standalone functions for importability
 async def list_calendars(
-    account: Optional[str] = Field(
+    account: str | None = Field(
         None, description="Account alias (uses default if not specified)"
     ),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """List all calendars for an account"""
     calendars = _managers["calendar_manager"].list_calendars(account)
 
@@ -51,12 +48,12 @@ async def list_calendars(
 
 async def create_calendar(
     name: str = Field(..., description="Calendar name"),
-    description: Optional[str] = Field(None, description="Calendar description"),
-    color: Optional[str] = Field(None, description="Calendar color (hex format)"),
-    account: Optional[str] = Field(
+    description: str | None = Field(None, description="Calendar description"),
+    color: str | None = Field(None, description="Calendar color (hex format)"),
+    account: str | None = Field(
         None, description="Account alias (uses default if not specified)"
     ),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Create a new calendar"""
     try:
         # Validate inputs
@@ -94,11 +91,11 @@ async def create_calendar(
 @handle_tool_errors
 async def delete_calendar(
     calendar_uid: str = Field(..., description="Calendar UID to delete"),
-    account: Optional[str] = Field(
+    account: str | None = Field(
         None, description="Account alias (uses default if not specified)"
     ),
-    request_id: str = None,
-) -> Dict[str, Any]:
+    request_id: str | None = None,
+) -> dict[str, Any]:
     """Delete a calendar"""
     # Validate inputs
     calendar_uid = InputValidator.validate_uid(calendar_uid)
@@ -135,8 +132,8 @@ delete_calendar.fn = delete_calendar
 
 # Export all tools for backwards compatibility
 __all__ = [
-    "list_calendars",
     "create_calendar",
     "delete_calendar",
+    "list_calendars",
     "register_calendar_tools",
 ]

@@ -2,26 +2,24 @@
 Unit tests for task management
 """
 
-import uuid
-from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, Mock, patch
-from typing import List
+from datetime import datetime, timezone
+from unittest.mock import Mock, patch
 
-import pytest
 import caldav
+import pytest
 from icalendar import Calendar as iCalendar
 from icalendar import Todo as iTodo
 
 from chronos_mcp.calendars import CalendarManager
-from chronos_mcp.tasks import TaskManager
-from chronos_mcp.models import Task, TaskStatus
 from chronos_mcp.exceptions import (
     CalendarNotFoundError,
-    TaskNotFoundError,
+    ChronosError,
     EventCreationError,
     EventDeletionError,
-    ChronosError,
+    TaskNotFoundError,
 )
+from chronos_mcp.models import TaskStatus
+from chronos_mcp.tasks import TaskManager
 
 
 class TestTaskManager:
