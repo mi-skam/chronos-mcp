@@ -540,7 +540,6 @@ uv run pytest
 
 ## Questions?
 
-- Check [MIGRATION.md](MIGRATION.md) for general migration guide
 - Check [CLAUDE.md](CLAUDE.md) for development workflow
 - Run `just --list` to see all available commands
 - Run `uv --help` for UV command reference

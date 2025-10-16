@@ -38,22 +38,20 @@ Unsure where to begin contributing? You can start by looking through these `begi
    git checkout -b feature/your-feature-name
    ```
 
-2. Create a virtual environment and install dependencies:
+2. Install dependencies using just:
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -e ".[dev]"
+   just init
    ```
 
-3. Set up pre-commit hooks:
+   Or manually with uv:
    ```bash
-   pre-commit install
+   uv sync --all-extras --dev
    ```
 
-4. Create a test CalDAV server (we recommend Radicale):
+3. Create a test CalDAV server (we recommend Radicale):
    ```bash
-   pip install radicale
-   python -m radicale --config tests/fixtures/radicale.conf
+   uv pip install radicale
+   uv run python -m radicale --config tests/fixtures/radicale.conf
    ```
 
 ### Pull Request Process
@@ -65,16 +63,16 @@ Unsure where to begin contributing? You can start by looking through these `begi
 
 ### Coding Standards
 
-* We use [Black](https://black.readthedocs.io/) for code formatting
-* We use [isort](https://pycqa.github.io/isort/) for import sorting
-* We use [flake8](https://flake8.pycqa.org/) for linting
+* We use [ruff](https://docs.astral.sh/ruff/) for linting and formatting
 * We use [mypy](http://mypy-lang.org/) for type checking
+* All code must pass CI checks before merging
 
 Run all checks with:
 ```bash
-make lint  # Runs all linters
-make format  # Formats code with black and isort
-make test  # Runs all tests
+just fix      # Auto-fix formatting and linting issues
+just check    # Quick check: lint + types + unit tests
+just ci       # Full CI/CD checks: everything including coverage and security
+just test     # Run all tests
 ```
 
 ### Testing
